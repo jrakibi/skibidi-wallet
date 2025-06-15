@@ -9,12 +9,22 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  StatusBar,
+  Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
+import { 
+  COLORS, 
+  TEXT_STYLES, 
+  SPACING, 
+  RADIUS, 
+  SHADOWS, 
+  ANIMATIONS,
+  CARD_STYLES 
+} from '../theme';
 
 type SendScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Send'>;
 type SendScreenRouteProp = RouteProp<RootStackParamList, 'Send'>;
@@ -24,20 +34,32 @@ type Props = {
   route: SendScreenRouteProp;
 };
 
+type SendMode = 'onchain' | 'lightning';
+
 export default function SendScreen({ navigation, route }: Props) {
   const { walletId } = route.params;
+  const [mode, setMode] = useState<SendMode>('onchain');
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
-  const sendBitcoin = async () => {
+  React.useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: ANIMATIONS.MEDIUM,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const sendTransaction = async () => {
     if (!address.trim()) {
-      Alert.alert('Bruh Moment 💀', 'Enter a valid address fr fr');
+      Alert.alert('Required', `Enter ${mode === 'onchain' ? 'Bitcoin address' : 'Lightning invoice'}`);
       return;
     }
 
     if (!amount.trim() || isNaN(Number(amount)) || Number(amount) <= 0) {
-      Alert.alert('Sus Amount 🤔', 'Enter a valid amount in sats');
+      Alert.alert('Invalid Amount', 'Enter valid amount in sats');
       return;
     }
 
@@ -45,231 +67,346 @@ export default function SendScreen({ navigation, route }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const response = await fetch('http://192.168.1.5:8080/send-bitcoin', {
+      const endpoint = mode === 'onchain' 
+        ? 'http://192.168.18.74:8080/send-bitcoin'
+        : 'http://192.168.18.74:8080/lightning/pay-invoice';
+
+      const body = mode === 'onchain' 
+        ? {
+            wallet_id: walletId,
+            to_address: address.trim(),
+            amount_sats: Number(amount),
+          }
+        : {
+            bolt11: address.trim(),
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet_id: walletId,
-          to_address: address.trim(),
-          amount_sats: Number(amount),
-        }),
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
 
       if (result.success) {
+        const emoji = mode === 'onchain' ? '🚀' : '⚡';
+        const title = mode === 'onchain' ? 'Sent' : 'Zapped';
         Alert.alert(
-          'Transaction Sent! 🚀',
-          `TXID: ${result.data.txid}\n\nIt's giving successful transfer vibes! 💀`,
-          [{ text: 'Based', onPress: () => navigation.goBack() }]
+          `${title} ${emoji}`,
+          `${Number(amount).toLocaleString()} sats sent`,
+          [{ text: 'Done', onPress: () => navigation.goBack() }]
         );
       } else {
-        Alert.alert('Transaction Failed 💀', result.error || 'Unknown error occurred');
+        Alert.alert('Failed', result.error || 'Try again');
       }
     } catch (error) {
-      Alert.alert('Network Error 🤡', 'Cannot connect to backend frfr');
+      Alert.alert('Error', 'Connection failed');
     } finally {
       setSending(false);
     }
   };
 
+  const quickAmounts = [1000, 5000, 10000, 50000];
+
   return (
-    <LinearGradient colors={['#FF3333', '#FF6666', '#FF9999']} style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
+      
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Send</Text>
+        <View style={styles.placeholder} />
+      </View>
+
       <KeyboardAvoidingView 
-        style={styles.container} 
+        style={styles.flex} 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView contentContainerStyle={styles.content}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>← BACK TO STASH</Text>
-          </TouchableOpacity>
-
-          <View style={styles.header}>
-            <Text style={styles.title}>💸 YEET SOME SATS 💸</Text>
-            <Text style={styles.subtitle}>SEND BITCOIN LIKE A SIGMA</Text>
-          </View>
-
-          <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>TO ADDRESS (WHO'S GETTING THE BAG?)</Text>
-              <TextInput
-                style={styles.input}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="bc1q... or 1... or 3..."
-                placeholderTextColor="#666"
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
+        <ScrollView 
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ opacity: fadeAnim }}>
+            
+            {/* Mode Toggle */}
+            <View style={styles.modeContainer}>
+              <TouchableOpacity
+                style={[styles.modeButton, mode === 'onchain' && styles.activeModeButton]}
+                onPress={() => setMode('onchain')}
+              >
+                <Text style={[styles.modeText, mode === 'onchain' && styles.activeModeText]}>
+                  Bitcoin
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modeButton, mode === 'lightning' && styles.activeModeButton]}
+                onPress={() => setMode('lightning')}
+              >
+                <Text style={[styles.modeText, mode === 'lightning' && styles.activeModeText]}>
+                  ⚡ Lightning
+                </Text>
+              </TouchableOpacity>
             </View>
 
+            {/* Address Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>AMOUNT IN SATOSHIS (HOW MUCH?)</Text>
+              <Text style={styles.inputLabel}>
+                {mode === 'onchain' ? 'Address' : 'Invoice'}
+              </Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.textInput}
+                  value={address}
+                  onChangeText={setAddress}
+                  placeholder={mode === 'onchain' ? 'bc1q...' : 'lnbc...'}
+                  placeholderTextColor={COLORS.TEXT_TERTIARY}
+                  multiline={mode === 'onchain'}
+                  numberOfLines={mode === 'onchain' ? 2 : 1}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.scanButton}
+                  onPress={() => navigation.navigate('QRScanner', {
+                    onScan: (data: string) => setAddress(data)
+                  })}
+                >
+                  <Text style={styles.scanButtonText}>📷</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Amount Input */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Amount</Text>
               <TextInput
-                style={styles.input}
+                style={styles.amountInput}
                 value={amount}
                 onChangeText={setAmount}
-                placeholder="1000"
-                placeholderTextColor="#666"
+                placeholder="0"
+                placeholderTextColor={COLORS.TEXT_TERTIARY}
                 keyboardType="numeric"
               />
-              <Text style={styles.conversionText}>
-                ≈ {amount ? (Number(amount) / 100000000).toFixed(8) : '0.00000000'} BTC
-              </Text>
+              <Text style={styles.unitText}>sats</Text>
             </View>
 
+            {/* Quick Amounts */}
+            <View style={styles.quickAmountsContainer}>
+              {quickAmounts.map((quickAmount) => (
+                <TouchableOpacity
+                  key={quickAmount}
+                  style={styles.quickAmountButton}
+                  onPress={() => setAmount(quickAmount.toString())}
+                >
+                  <Text style={styles.quickAmountText}>
+                    {quickAmount.toLocaleString()}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Send Button */}
             <TouchableOpacity
-              style={[styles.sendButton, sending && styles.sendingButton]}
-              onPress={sendBitcoin}
-              disabled={sending}
+              style={[
+                styles.sendButton,
+                (!address.trim() || !amount.trim() || Number(amount) <= 0 || sending) && styles.sendButtonDisabled
+              ]}
+              onPress={sendTransaction}
+              disabled={!address.trim() || !amount.trim() || Number(amount) <= 0 || sending}
             >
               <Text style={styles.sendButtonText}>
-                {sending ? '🚀 YEETING...' : '🚀 YEET THE SATS'}
-              </Text>
-              <Text style={styles.sendButtonSubtext}>
-                {sending ? 'BROADCASTING TO BLOCKCHAIN...' : 'NO TAKE BACKS FR FR'}
+                {sending ? 'Sending...' : `Send ${mode === 'lightning' ? '⚡' : '🚀'}`}
               </Text>
             </TouchableOpacity>
-          </View>
 
-          <View style={styles.warnings}>
-            <Text style={styles.warningText}>⚠️ DOUBLE CHECK EVERYTHING ⚠️</Text>
-            <Text style={styles.warningSubtext}>BITCOIN TRANSACTIONS ARE FINAL</Text>
-            <Text style={styles.warningSubtext}>NO CUSTOMER SERVICE TO CALL 💀</Text>
-            <Text style={styles.warningSubtext}>IT'S GIVING IMMUTABLE VIBES</Text>
-          </View>
-
-          <Text style={styles.memeText}>
-            🦈 TRALALERO TRALALA SUPPORTS YOUR TRANSACTION 🦈
-          </Text>
+          </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.BACKGROUND,
   },
-  content: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  backButton: {
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#FFF',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    alignSelf: 'flex-start',
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#FFF',
-    fontWeight: '900',
-    fontSize: 14,
-  },
+  
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.LG,
+    paddingTop: 60,
+    paddingBottom: SPACING.LG,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '900',
-    color: '#000',
-    textAlign: 'center',
-    textShadowColor: '#FFF',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitle: {
+  
+  backButtonText: {
+    fontSize: 18,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  placeholder: {
+    width: 40,
+  },
+  
+  flex: {
+    flex: 1,
+  },
+  
+  content: {
+    paddingHorizontal: SPACING.LG,
+    paddingBottom: SPACING.XL,
+  },
+  
+  modeContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    padding: 4,
+    marginBottom: SPACING.XL,
+  },
+  
+  modeButton: {
+    flex: 1,
+    paddingVertical: SPACING.MD,
+    alignItems: 'center',
+    borderRadius: RADIUS.MD,
+  },
+  
+  activeModeButton: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  
+  modeText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 10,
+    fontWeight: '600',
+    color: COLORS.TEXT_SECONDARY,
   },
-  form: {
-    marginBottom: 30,
+  
+  activeModeText: {
+    color: COLORS.TEXT_PRIMARY,
   },
+  
   inputContainer: {
-    marginBottom: 25,
+    marginBottom: SPACING.XL,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#000',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#FFF',
-    borderWidth: 3,
-    borderColor: '#000',
-    padding: 15,
+  
+  inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
-    minHeight: 50,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.SM,
   },
-  conversionText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 5,
-    textAlign: 'right',
-  },
-  sendButton: {
-    backgroundColor: '#00FF00',
-    borderWidth: 4,
-    borderColor: '#000',
-    paddingVertical: 20,
+  
+  inputRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    transform: [{ rotate: '-1deg' }],
-    marginTop: 20,
   },
-  sendingButton: {
-    backgroundColor: '#FFFF00',
-    transform: [{ rotate: '1deg' }],
+  
+  textInput: {
+    flex: 1,
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    padding: SPACING.LG,
+    fontSize: 16,
+    color: COLORS.TEXT_PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+    textAlignVertical: 'top',
+    minHeight: 56,
   },
-  sendButtonText: {
+  
+  scanButton: {
+    padding: SPACING.MD,
+    borderLeftWidth: 1,
+    borderLeftColor: COLORS.BORDER_LIGHT,
+  },
+  
+  scanButtonText: {
     fontSize: 20,
-    fontWeight: '900',
-    color: '#000',
+    color: COLORS.TEXT_SECONDARY,
   },
-  sendButtonSubtext: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 5,
+  
+  amountInput: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    fontSize: 24,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+    height: 80,
   },
-  warnings: {
-    backgroundColor: '#FFFF00',
-    borderWidth: 3,
-    borderColor: '#000',
-    padding: 20,
+  
+  unitText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    marginTop: SPACING.SM,
+  },
+  
+  quickAmountsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.SM,
+    marginBottom: SPACING.XL,
+  },
+  
+  quickAmountButton: {
+    backgroundColor: COLORS.SURFACE,
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    borderRadius: RADIUS.SM,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+  },
+  
+  quickAmountText: {
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '500',
+  },
+  
+  sendButton: {
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: RADIUS.LG,
+    height: 56,
     alignItems: 'center',
-    transform: [{ rotate: '1deg' }],
-    marginBottom: 20,
+    justifyContent: 'center',
+    ...SHADOWS.SUBTLE,
   },
-  warningText: {
+  
+  sendButtonDisabled: {
+    backgroundColor: COLORS.SURFACE,
+    opacity: 0.5,
+  },
+  
+  sendButtonText: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#000',
-    textAlign: 'center',
-  },
-  warningSubtext: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-    marginTop: 3,
-  },
-  memeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-    marginTop: 20,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
   },
 }); 

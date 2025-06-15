@@ -7,12 +7,22 @@ import {
   ScrollView,
   RefreshControl,
   Alert,
+  StatusBar,
+  Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../App';
+import { 
+  COLORS, 
+  TEXT_STYLES, 
+  SPACING, 
+  RADIUS, 
+  SHADOWS, 
+  ANIMATIONS,
+  CARD_STYLES 
+} from '../theme';
 
 type TransactionScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Transactions'>;
 type TransactionScreenRouteProp = RouteProp<RootStackParamList, 'Transactions'>;
@@ -34,14 +44,21 @@ export default function TransactionScreen({ navigation, route }: Props) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
     fetchTransactions();
+    
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: ANIMATIONS.MEDIUM,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   const fetchTransactions = async () => {
     try {
-      const response = await fetch('http://192.168.1.5:8080/get-transactions', {
+      const response = await fetch('http://192.168.18.74:8080/get-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: walletId }),
@@ -52,10 +69,10 @@ export default function TransactionScreen({ navigation, route }: Props) {
       if (result.success) {
         setTransactions(result.data);
       } else {
-        Alert.alert('Failed to Load 💀', 'Cannot fetch transactions frfr');
+        Alert.alert('Failed to Load', 'Unable to fetch transaction history');
       }
     } catch (error) {
-      Alert.alert('Network Error 🤡', 'Cannot connect to backend');
+      Alert.alert('Network Error', 'Unable to connect to the network');
     } finally {
       setLoading(false);
     }
@@ -65,7 +82,7 @@ export default function TransactionScreen({ navigation, route }: Props) {
     setRefreshing(true);
     await fetchTransactions();
     setRefreshing(false);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const formatSats = (sats: number) => {
@@ -73,306 +90,311 @@ export default function TransactionScreen({ navigation, route }: Props) {
   };
 
   const formatDate = (timestamp?: number) => {
-    if (!timestamp) return 'Pending...';
-    return new Date(timestamp * 1000).toLocaleDateString();
+    if (!timestamp) return 'Pending';
+    const date = new Date(timestamp * 1000);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
-  const getTransactionType = (amount: number) => {
-    return amount > 0 ? 'RECEIVED' : 'SENT';
+  const getStatusInfo = (confirmations: number) => {
+    if (confirmations === 0) return { status: 'Pending', color: COLORS.WARNING };
+    if (confirmations < 6) return { status: 'Confirming', color: COLORS.INFO };
+    return { status: 'Confirmed', color: COLORS.SUCCESS };
   };
 
-  const getTransactionEmoji = (amount: number) => {
-    return amount > 0 ? '📥' : '📤';
-  };
-
-  const getStatusEmoji = (confirmations: number) => {
-    if (confirmations === 0) return '⏳';
-    if (confirmations < 6) return '🔄';
-    return '✅';
+  const getAmountColor = (amount: number) => {
+    return amount > 0 ? COLORS.SUCCESS : COLORS.TEXT_PRIMARY;
   };
 
   return (
-    <LinearGradient colors={['#00FFFF', '#0099CC', '#006699']} style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-      >
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>← BACK TO STASH</Text>
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
+      
+      {/* Minimal Header */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton} 
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>History</Text>
+        <View style={styles.placeholder} />
+      </View>
 
-        <View style={styles.header}>
-          <Text style={styles.title}>📜 TRANSACTION HISTORY 📜</Text>
-          <Text style={styles.subtitle}>ALL THE RECEIPTS FR FR</Text>
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>LOADING TRANSACTIONS...</Text>
-            <Text style={styles.loadingSubtext}>FETCHING THE BLOCKCHAIN VIBES 🔄</Text>
-          </View>
-        ) : transactions.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyTitle}>NO TRANSACTIONS YET 💀</Text>
-            <Text style={styles.emptyText}>Your transaction history is giving clean slate energy</Text>
-            <Text style={styles.emptySubtext}>Send or receive some Bitcoin to see activity here!</Text>
-          </View>
-        ) : (
-          <View style={styles.transactionsList}>
-            <Text style={styles.listTitle}>
-              TOTAL TRANSACTIONS: {transactions.length}
-            </Text>
-            
-            {transactions.map((tx, index) => (
-              <View key={tx.txid} style={[
-                styles.transactionItem,
-                { transform: [{ rotate: index % 2 === 0 ? '1deg' : '-1deg' }] }
-              ]}>
-                <View style={styles.transactionHeader}>
-                  <View style={styles.transactionTypeContainer}>
-                    <Text style={styles.transactionEmoji}>
-                      {getTransactionEmoji(tx.amount)}
-                    </Text>
-                    <Text style={styles.transactionType}>
-                      {getTransactionType(tx.amount)}
-                    </Text>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={COLORS.PRIMARY}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
+        <Animated.View style={{ opacity: fadeAnim }}>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading...</Text>
+            </View>
+          ) : transactions.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyTitle}>No transactions</Text>
+              <Text style={styles.emptyText}>
+                Your transaction history will appear here
+              </Text>
+            </View>
+          ) : (
+            <>
+              {/* Stats - Minimal */}
+              <View style={styles.statsCard}>
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>{transactions.length}</Text>
+                    <Text style={styles.statLabel}>Total</Text>
                   </View>
-                  <Text style={[
-                    styles.transactionAmount,
-                    { color: tx.amount > 0 ? '#00FF00' : '#FF3333' }
-                  ]}>
-                    {tx.amount > 0 ? '+' : ''}{formatSats(tx.amount)} SATS
-                  </Text>
-                </View>
-
-                <View style={styles.transactionDetails}>
-                  <Text style={styles.transactionId}>
-                    TXID: {tx.txid.substring(0, 12)}...{tx.txid.substring(tx.txid.length - 12)}
-                  </Text>
-                  <Text style={styles.transactionDate}>
-                    DATE: {formatDate(tx.timestamp)}
-                  </Text>
-                  <View style={styles.confirmationRow}>
-                    <Text style={styles.confirmationText}>
-                      {getStatusEmoji(tx.confirmations)} CONFIRMATIONS: {tx.confirmations}
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>
+                      {transactions.filter(tx => tx.amount > 0).length}
                     </Text>
-                    <Text style={styles.confirmationStatus}>
-                      {tx.confirmations === 0 ? 'PENDING' : 
-                       tx.confirmations < 6 ? 'CONFIRMING' : 'CONFIRMED'}
+                    <Text style={styles.statLabel}>Received</Text>
+                  </View>
+                  <View style={styles.statItem}>
+                    <Text style={styles.statNumber}>
+                      {transactions.filter(tx => tx.amount < 0).length}
                     </Text>
+                    <Text style={styles.statLabel}>Sent</Text>
                   </View>
                 </View>
               </View>
-            ))}
-          </View>
-        )}
 
-        <View style={styles.legendBox}>
-          <Text style={styles.legendTitle}>📖 TRANSACTION LEGEND</Text>
-          <Text style={styles.legendText}>📥 RECEIVED = Bitcoin sent to you</Text>
-          <Text style={styles.legendText}>📤 SENT = Bitcoin you sent out</Text>
-          <Text style={styles.legendText}>⏳ PENDING = 0 confirmations</Text>
-          <Text style={styles.legendText}>🔄 CONFIRMING = 1-5 confirmations</Text>
-          <Text style={styles.legendText}>✅ CONFIRMED = 6+ confirmations</Text>
-        </View>
+              {/* Transactions List - Clean */}
+              <View style={styles.transactionsList}>
+                {transactions.map((tx, index) => {
+                  const statusInfo = getStatusInfo(tx.confirmations);
+                  
+                  return (
+                    <View key={tx.txid} style={styles.transactionCard}>
+                      <View style={styles.transactionContent}>
+                        <View style={styles.transactionLeft}>
+                          <View style={styles.iconContainer}>
+                            <Text style={styles.transactionIcon}>
+                              {tx.amount > 0 ? '↓' : '↑'}
+                            </Text>
+                          </View>
+                          
+                          <View style={styles.transactionInfo}>
+                            <Text style={styles.transactionType}>
+                              {tx.amount > 0 ? 'Received' : 'Sent'}
+                            </Text>
+                            <Text style={styles.transactionDate}>
+                              {formatDate(tx.timestamp)}
+                            </Text>
+                          </View>
+                        </View>
 
-        <Text style={styles.memeText}>
-          🦈 TRALALERO TRALALA TRACKS YOUR TRANSACTIONS 🦈
-        </Text>
-        <Text style={styles.memeText}>
-          🐊 BOMBARDIRO CROCODILO KEEPS THE RECORDS 🐊
-        </Text>
+                        <View style={styles.transactionRight}>
+                          <Text style={[
+                            styles.transactionAmount,
+                            { color: getAmountColor(tx.amount) }
+                          ]}>
+                            {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))}
+                          </Text>
+                          <Text style={[styles.statusText, { color: statusInfo.color }]}>
+                            {statusInfo.status}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: COLORS.BACKGROUND,
   },
-  content: {
-    padding: 20,
-    paddingTop: 60,
-  },
-  backButton: {
-    backgroundColor: '#000',
-    borderWidth: 2,
-    borderColor: '#FFF',
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    alignSelf: 'flex-start',
-    marginBottom: 20,
-  },
-  backButtonText: {
-    color: '#FFF',
-    fontWeight: '900',
-    fontSize: 14,
-  },
+  
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.LG,
+    paddingTop: 60,
+    paddingBottom: SPACING.LG,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#000',
-    textAlign: 'center',
-    textShadowColor: '#FFF',
-    textShadowOffset: { width: 2, height: 2 },
-    textShadowRadius: 4,
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#000',
-    marginTop: 10,
+  
+  backButtonText: {
+    fontSize: 18,
+    color: COLORS.TEXT_PRIMARY,
   },
+  
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  placeholder: {
+    width: 40,
+  },
+  
+  scrollView: {
+    flex: 1,
+  },
+  
+  content: {
+    paddingHorizontal: SPACING.LG,
+    paddingBottom: SPACING.XL,
+  },
+  
   loadingContainer: {
     alignItems: 'center',
-    paddingVertical: 60,
+    paddingVertical: SPACING.XL * 2,
   },
+  
   loadingText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#000',
+    fontSize: 16,
+    color: COLORS.TEXT_SECONDARY,
   },
-  loadingSubtext: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    marginTop: 10,
-  },
+  
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 60,
-    backgroundColor: '#FFFF00',
-    borderWidth: 4,
-    borderColor: '#000',
-    padding: 30,
-    transform: [{ rotate: '-2deg' }],
+    paddingVertical: SPACING.XL * 2,
+    gap: SPACING.MD,
   },
+  
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#000',
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 5,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
-    textAlign: 'center',
-  },
-  transactionsList: {
-    marginBottom: 30,
-  },
-  listTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#000',
-    textAlign: 'center',
-    marginBottom: 20,
-    backgroundColor: '#FFFF00',
-    borderWidth: 2,
-    borderColor: '#000',
-    padding: 10,
-  },
-  transactionItem: {
-    backgroundColor: '#FFF',
-    borderWidth: 3,
-    borderColor: '#000',
-    padding: 15,
-    marginBottom: 15,
-  },
-  transactionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  transactionTypeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  transactionEmoji: {
     fontSize: 20,
-    marginRight: 8,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
   },
+  
+  emptyText: {
+    fontSize: 14,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+  },
+  
+  statsCard: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    padding: SPACING.LG,
+    marginBottom: SPACING.XL,
+    ...SHADOWS.SUBTLE,
+  },
+  
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  
+  statItem: {
+    alignItems: 'center',
+    gap: SPACING.XS,
+  },
+  
+  statNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.PRIMARY,
+  },
+  
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  
+  transactionsList: {
+    gap: SPACING.SM,
+  },
+  
+  transactionCard: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+  },
+  
+  transactionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  
+  transactionLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.MD,
+    flex: 1,
+  },
+  
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.BACKGROUND,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  transactionIcon: {
+    fontSize: 16,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  
+  transactionInfo: {
+    gap: 2,
+    flex: 1,
+  },
+  
   transactionType: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#000',
-  },
-  transactionAmount: {
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  transactionDetails: {
-    borderTopWidth: 1,
-    borderTopColor: '#CCC',
-    paddingTop: 10,
-  },
-  transactionId: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 5,
+    color: COLORS.TEXT_PRIMARY,
   },
+  
   transactionDate: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 5,
+    color: COLORS.TEXT_TERTIARY,
   },
-  confirmationRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  
+  transactionRight: {
+    alignItems: 'flex-end',
+    gap: 2,
   },
-  confirmationText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#000',
-  },
-  confirmationStatus: {
-    fontSize: 12,
-    fontWeight: '900',
-    color: '#FF6600',
-  },
-  legendBox: {
-    backgroundColor: '#FF00FF',
-    borderWidth: 3,
-    borderColor: '#000',
-    padding: 20,
-    marginBottom: 20,
-    transform: [{ rotate: '1deg' }],
-  },
-  legendTitle: {
+  
+  transactionAmount: {
     fontSize: 16,
-    fontWeight: '900',
-    color: '#000',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  legendText: {
-    fontSize: 12,
     fontWeight: '600',
-    color: '#000',
-    marginVertical: 2,
   },
-  memeText: {
+  
+  statusText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#000',
-    textAlign: 'center',
-    marginTop: 10,
+    fontWeight: '500',
   },
 }); 
