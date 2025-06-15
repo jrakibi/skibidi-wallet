@@ -89,7 +89,7 @@ export default function WalletManagerScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const res = await fetch('http://192.168.18.74:8080/create-wallet', {
+      const res = await fetch('http://172.20.10.3:8080/create-wallet', {
         method: 'POST',
       });
       const json = await res.json();
@@ -148,6 +148,11 @@ export default function WalletManagerScreen({ navigation }: Props) {
   const restoreWallet = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     navigation.navigate('Restore');
+  };
+
+  const navigateToEducation = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('Education');
   };
 
   useFocusEffect(
@@ -225,6 +230,13 @@ export default function WalletManagerScreen({ navigation }: Props) {
               onPress={restoreWallet}
             >
               <Text style={styles.secondaryButtonText}>Restore Wallet</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.educationButton}
+              onPress={navigateToEducation}
+            >
+              <Text style={styles.educationButtonText}>🎓 Learn Bitcoin</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -408,6 +420,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: COLORS.TEXT_PRIMARY,
+  },
+  
+  educationButton: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY,
+  },
+  
+  educationButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: COLORS.PRIMARY,
   },
   
   modalOverlay: {

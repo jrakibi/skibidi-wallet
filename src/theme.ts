@@ -90,6 +90,7 @@ export const SPACING = {
 };
 
 export const RADIUS = {
+  XS: 4,
   SM: 8,
   MD: 16,
   LG: 24,

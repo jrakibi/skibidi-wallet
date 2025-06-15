@@ -6,10 +6,10 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
-  Clipboard,
-  Share,
   StatusBar,
   Animated,
+  Share,
+  Clipboard,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import QRCode from 'react-native-qrcode-svg';
@@ -34,12 +34,8 @@ type Props = {
   route: ReceiveScreenRouteProp;
 };
 
-type ReceiveMode = 'onchain' | 'lightning';
-
 export default function ReceiveScreen({ navigation, route }: Props) {
   const { address } = route.params;
-  const [mode, setMode] = useState<ReceiveMode>('onchain');
-  const [lightningInvoice, setLightningInvoice] = useState('');
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -48,59 +44,28 @@ export default function ReceiveScreen({ navigation, route }: Props) {
       duration: ANIMATIONS.MEDIUM,
       useNativeDriver: true,
     }).start();
-
-    if (mode === 'lightning') {
-      generateLightningInvoice();
-    }
-  }, [mode]);
-
-  const generateLightningInvoice = async () => {
-    try {
-      const response = await fetch('http://192.168.18.74:8080/lightning/create-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount_msats: 1000000, // 1000 sats
-          description: 'Skibidi Wallet Payment',
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setLightningInvoice(result.data.bolt11);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create Lightning invoice');
-    }
-  };
-
-  const currentValue = mode === 'onchain' ? address : lightningInvoice;
+  }, []);
 
   const copyToClipboard = async () => {
-    if (!currentValue) return;
-    
-    await Clipboard.setString(currentValue);
+    Clipboard.setString(address);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert('Copied', `${mode === 'onchain' ? 'Address' : 'Invoice'} copied to clipboard`);
+    Alert.alert('Copied', 'Address copied to clipboard');
   };
 
-  const shareValue = async () => {
-    if (!currentValue) return;
-
+  const shareAddress = async () => {
     try {
       await Share.share({
-        message: currentValue,
-        title: mode === 'onchain' ? 'Bitcoin Address' : 'Lightning Invoice',
+        message: address,
+        title: 'Bitcoin Address',
       });
     } catch (error) {
       console.log('Error sharing:', error);
     }
   };
 
-  const truncateValue = (value: string) => {
-    if (!value) return '';
-    if (value.length <= 20) return value;
-    return `${value.substring(0, 10)}...${value.substring(value.length - 10)}`;
+  const truncateAddress = (addr: string) => {
+    if (addr.length <= 20) return addr;
+    return `${addr.substring(0, 10)}...${addr.substring(addr.length - 10)}`;
   };
 
   return (
@@ -115,7 +80,7 @@ export default function ReceiveScreen({ navigation, route }: Props) {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Receive</Text>
+        <Text style={styles.headerTitle}>Receive Bitcoin</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -124,39 +89,15 @@ export default function ReceiveScreen({ navigation, route }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={{ opacity: fadeAnim }}>
-          {/* Mode Toggle */}
-          <View style={styles.modeContainer}>
-            <TouchableOpacity
-              style={[styles.modeButton, mode === 'onchain' && styles.activeModeButton]}
-              onPress={() => setMode('onchain')}
-            >
-              <Text style={[styles.modeText, mode === 'onchain' && styles.activeModeText]}>
-                Bitcoin
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modeButton, mode === 'lightning' && styles.activeModeButton]}
-              onPress={() => setMode('lightning')}
-            >
-              <Text style={[styles.modeText, mode === 'lightning' && styles.activeModeText]}>
-                ⚡ Lightning
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Address/Invoice Display */}
-          <View style={styles.valueContainer}>
-            <Text style={styles.valueLabel}>
-              {mode === 'onchain' ? 'Address' : 'Invoice'}
-            </Text>
+          
+          {/* Address Display */}
+          <View style={styles.addressContainer}>
+            <Text style={styles.addressLabel}>Address</Text>
             
-            <View style={styles.valueCard}>
-              <Text style={styles.valueText}>
-                {truncateValue(currentValue)}
+            <View style={styles.addressCard}>
+              <Text style={styles.addressText}>
+                {truncateAddress(address)}
               </Text>
-              {mode === 'lightning' && !lightningInvoice && (
-                <Text style={styles.loadingText}>Generating...</Text>
-              )}
             </View>
           </View>
 
@@ -165,15 +106,13 @@ export default function ReceiveScreen({ navigation, route }: Props) {
             <TouchableOpacity
               style={styles.actionButton}
               onPress={copyToClipboard}
-              disabled={!currentValue}
             >
               <Text style={styles.actionButtonText}>Copy</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={shareValue}
-              disabled={!currentValue}
+              onPress={shareAddress}
             >
               <Text style={styles.actionButtonText}>Share</Text>
             </TouchableOpacity>
@@ -182,10 +121,7 @@ export default function ReceiveScreen({ navigation, route }: Props) {
           {/* Info Text */}
           <View style={styles.infoContainer}>
             <Text style={styles.infoText}>
-              {mode === 'onchain' 
-                ? 'Share this address to receive Bitcoin'
-                : 'Share this invoice to receive instant payments'
-              }
+              Share this address to receive Bitcoin
             </Text>
           </View>
 
@@ -194,7 +130,7 @@ export default function ReceiveScreen({ navigation, route }: Props) {
             <View style={styles.qrCard}>
               <View style={styles.qrContainer}>
                 <QRCode
-                  value={currentValue || address}
+                  value={address}
                   size={180}
                   color={COLORS.TEXT_PRIMARY}
                   backgroundColor={COLORS.SURFACE}
@@ -252,47 +188,18 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.XL,
   },
   
-  modeContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: 4,
+  addressContainer: {
     marginBottom: SPACING.XL,
   },
   
-  modeButton: {
-    flex: 1,
-    paddingVertical: SPACING.MD,
-    alignItems: 'center',
-    borderRadius: RADIUS.MD,
-  },
-  
-  activeModeButton: {
-    backgroundColor: COLORS.PRIMARY,
-  },
-  
-  modeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.TEXT_SECONDARY,
-  },
-  
-  activeModeText: {
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  valueContainer: {
-    marginBottom: SPACING.XL,
-  },
-  
-  valueLabel: {
+  addressLabel: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.TEXT_PRIMARY,
     marginBottom: SPACING.SM,
   },
   
-  valueCard: {
+  addressCard: {
     backgroundColor: COLORS.SURFACE,
     borderRadius: RADIUS.LG,
     padding: SPACING.XL,
@@ -301,17 +208,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   
-  valueText: {
+  addressText: {
     fontSize: 16,
     color: COLORS.TEXT_PRIMARY,
     textAlign: 'center',
     fontFamily: 'monospace',
-  },
-  
-  loadingText: {
-    fontSize: 14,
-    color: COLORS.TEXT_SECONDARY,
-    marginTop: SPACING.SM,
   },
   
   actionsContainer: {

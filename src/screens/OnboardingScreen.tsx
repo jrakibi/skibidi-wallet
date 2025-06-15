@@ -43,12 +43,12 @@ export default function OnboardingScreen({ navigation }: Props) {
 
   const createNewWallet = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('WalletManager');
+    navigation.navigate('MainTabs');
   };
 
   const restoreWallet = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('WalletManager');
+    navigation.navigate('MainTabs');
   };
 
   return (

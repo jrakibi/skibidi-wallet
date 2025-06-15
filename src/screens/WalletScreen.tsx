@@ -61,12 +61,14 @@ export default function WalletScreen({ navigation, route }: Props) {
   const [balance, setBalance] = useState<Balance>({ confirmed: 0, unconfirmed: 0, total: 0 });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [btcPrice, setBtcPrice] = useState<number>(0);
   
   // Animations
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
     fetchWalletData();
+    fetchBtcPrice();
     Animated.timing(fadeAnim, { 
       toValue: 1, 
       duration: ANIMATIONS.MEDIUM, 
@@ -77,7 +79,7 @@ export default function WalletScreen({ navigation, route }: Props) {
   const fetchWalletData = async () => {
     try {
       // Fetch balance
-      const balanceRes = await fetch('http://192.168.18.74:8080/get-balance', {
+      const balanceRes = await fetch('http://172.20.10.3:8080/get-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: walletId }),
@@ -89,7 +91,7 @@ export default function WalletScreen({ navigation, route }: Props) {
       }
 
       // Fetch transactions
-      const txRes = await fetch('http://192.168.18.74:8080/get-transactions', {
+      const txRes = await fetch('http://172.20.10.3:8080/get-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: walletId }),
@@ -104,9 +106,44 @@ export default function WalletScreen({ navigation, route }: Props) {
     }
   };
 
+  const fetchBtcPrice = async () => {
+    try {
+      // Try Coinbase API first
+      const response = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=BTC');
+      const data = await response.json();
+      
+      if (data && data.data && data.data.rates && data.data.rates.USD) {
+        const usdRate = parseFloat(data.data.rates.USD);
+        setBtcPrice(usdRate);
+        console.log('BTC price fetched successfully:', usdRate);
+        return;
+      }
+    } catch (error) {
+      console.log('Coinbase API failed:', error);
+    }
+
+    try {
+      // Fallback to CoinGecko API
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      const data = await response.json();
+      
+      if (data && data.bitcoin && data.bitcoin.usd) {
+        const usdRate = data.bitcoin.usd;
+        setBtcPrice(usdRate);
+        console.log('BTC price fetched from CoinGecko:', usdRate);
+        return;
+      }
+    } catch (error) {
+      console.log('CoinGecko API failed:', error);
+    }
+
+    console.log('All BTC price APIs failed - USD conversion disabled');
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchWalletData();
+    await fetchBtcPrice();
     setRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -139,6 +176,13 @@ export default function WalletScreen({ navigation, route }: Props) {
     return sats.toLocaleString();
   };
 
+  const formatUSD = (sats: number) => {
+    if (!btcPrice) return '';
+    const btcAmount = sats / 100000000; // Convert sats to BTC
+    const usdAmount = btcAmount * btcPrice;
+    return `$${usdAmount.toFixed(2)}`;
+  };
+
   const renderTransaction = (tx: Transaction, index: number) => (
     <View key={tx.txid} style={styles.transactionItem}>
       <View style={styles.transactionIcon}>
@@ -147,9 +191,17 @@ export default function WalletScreen({ navigation, route }: Props) {
         </Text>
       </View>
       <View style={styles.transactionContent}>
-        <Text style={styles.transactionAmount}>
-          {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))}
-        </Text>
+        <View style={styles.transactionAmountRow}>
+          <Text style={styles.transactionAmount}>
+            {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))}
+          </Text>
+          <Text style={styles.transactionBitcoinSymbol}>₿</Text>
+        </View>
+        {btcPrice > 0 && (
+          <Text style={styles.transactionUSD}>
+            {formatUSD(Math.abs(tx.amount))}
+          </Text>
+        )}
         <Text style={styles.transactionStatus}>
           {tx.confirmations > 0 ? 'confirmed' : 'pending'}
         </Text>
@@ -186,10 +238,17 @@ export default function WalletScreen({ navigation, route }: Props) {
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Balance Card */}
           <View style={styles.balanceCard}>
-            <Text style={styles.balanceAmount}>
-              {formatSats(balance.total)}
-            </Text>
-            <Text style={styles.balanceCurrency}>sats</Text>
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceAmount}>
+                {formatSats(balance.total)}
+              </Text>
+              <Text style={styles.bitcoinSymbol}>₿</Text>
+            </View>
+            {btcPrice > 0 && (
+              <Text style={styles.balanceUSD}>
+                {formatUSD(balance.total)}
+              </Text>
+            )}
           </View>
 
           {/* Action Buttons - Only 2 main actions */}
@@ -288,18 +347,29 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.XL,
   },
   
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
   balanceAmount: {
     fontSize: 48,
     fontWeight: '700',
     color: COLORS.TEXT_PRIMARY,
-    marginBottom: SPACING.XS,
   },
   
-  balanceCurrency: {
-    fontSize: 16,
+  bitcoinSymbol: {
+    fontSize: 32,
+    color: COLORS.PRIMARY,
+    marginLeft: SPACING.SM,
+    fontWeight: '600',
+  },
+  
+  balanceUSD: {
+    fontSize: 18,
     color: COLORS.TEXT_SECONDARY,
-    textTransform: 'uppercase',
-    letterSpacing: 2,
+    marginTop: SPACING.SM,
+    fontWeight: '500',
   },
   
   actionsContainer: {
@@ -387,10 +457,27 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   
+  transactionAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
   transactionAmount: {
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.TEXT_PRIMARY,
+    marginBottom: 2,
+  },
+  
+  transactionBitcoinSymbol: {
+    fontSize: 16,
+    color: COLORS.TEXT_SECONDARY,
+    marginLeft: SPACING.XS,
+  },
+  
+  transactionUSD: {
+    fontSize: 16,
+    color: COLORS.TEXT_SECONDARY,
     marginBottom: 2,
   },
   

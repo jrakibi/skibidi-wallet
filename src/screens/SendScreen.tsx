@@ -23,7 +23,8 @@ import {
   RADIUS, 
   SHADOWS, 
   ANIMATIONS,
-  CARD_STYLES 
+  CARD_STYLES,
+  BUTTON_STYLES 
 } from '../theme';
 
 type SendScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Send'>;
@@ -34,11 +35,8 @@ type Props = {
   route: SendScreenRouteProp;
 };
 
-type SendMode = 'onchain' | 'lightning';
-
 export default function SendScreen({ navigation, route }: Props) {
   const { walletId } = route.params;
-  const [mode, setMode] = useState<SendMode>('onchain');
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
@@ -54,7 +52,7 @@ export default function SendScreen({ navigation, route }: Props) {
 
   const sendTransaction = async () => {
     if (!address.trim()) {
-      Alert.alert('Required', `Enter ${mode === 'onchain' ? 'Bitcoin address' : 'Lightning invoice'}`);
+      Alert.alert('Required', 'Enter Bitcoin address');
       return;
     }
 
@@ -67,33 +65,21 @@ export default function SendScreen({ navigation, route }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const endpoint = mode === 'onchain' 
-        ? 'http://192.168.18.74:8080/send-bitcoin'
-        : 'http://192.168.18.74:8080/lightning/pay-invoice';
-
-      const body = mode === 'onchain' 
-        ? {
-            wallet_id: walletId,
-            to_address: address.trim(),
-            amount_sats: Number(amount),
-          }
-        : {
-            bolt11: address.trim(),
-          };
-
-      const response = await fetch(endpoint, {
+      const response = await fetch('http://172.20.10.3:8080/send-bitcoin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          wallet_id: walletId,
+          to_address: address.trim(),
+          amount_sats: Number(amount),
+        }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        const emoji = mode === 'onchain' ? '🚀' : '⚡';
-        const title = mode === 'onchain' ? 'Sent' : 'Zapped';
         Alert.alert(
-          `${title} ${emoji}`,
+          'Sent 🚀',
           `${Number(amount).toLocaleString()} sats sent`,
           [{ text: 'Done', onPress: () => navigation.goBack() }]
         );
@@ -121,7 +107,7 @@ export default function SendScreen({ navigation, route }: Props) {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Send</Text>
+        <Text style={styles.headerTitle}>Send Bitcoin</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -135,40 +121,18 @@ export default function SendScreen({ navigation, route }: Props) {
         >
           <Animated.View style={{ opacity: fadeAnim }}>
             
-            {/* Mode Toggle */}
-            <View style={styles.modeContainer}>
-              <TouchableOpacity
-                style={[styles.modeButton, mode === 'onchain' && styles.activeModeButton]}
-                onPress={() => setMode('onchain')}
-              >
-                <Text style={[styles.modeText, mode === 'onchain' && styles.activeModeText]}>
-                  Bitcoin
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modeButton, mode === 'lightning' && styles.activeModeButton]}
-                onPress={() => setMode('lightning')}
-              >
-                <Text style={[styles.modeText, mode === 'lightning' && styles.activeModeText]}>
-                  ⚡ Lightning
-                </Text>
-              </TouchableOpacity>
-            </View>
-
             {/* Address Input */}
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>
-                {mode === 'onchain' ? 'Address' : 'Invoice'}
-              </Text>
+              <Text style={styles.inputLabel}>Address</Text>
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.textInput}
                   value={address}
                   onChangeText={setAddress}
-                  placeholder={mode === 'onchain' ? 'bc1q...' : 'lnbc...'}
+                  placeholder="bc1q..."
                   placeholderTextColor={COLORS.TEXT_TERTIARY}
-                  multiline={mode === 'onchain'}
-                  numberOfLines={mode === 'onchain' ? 2 : 1}
+                  multiline
+                  numberOfLines={2}
                   autoCapitalize="none"
                   autoCorrect={false}
                 />
@@ -186,43 +150,48 @@ export default function SendScreen({ navigation, route }: Props) {
             {/* Amount Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Amount</Text>
-              <TextInput
-                style={styles.amountInput}
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0"
-                placeholderTextColor={COLORS.TEXT_TERTIARY}
-                keyboardType="numeric"
-              />
-              <Text style={styles.unitText}>sats</Text>
+              <View style={styles.amountInputContainer}>
+                <TextInput
+                  style={styles.amountInput}
+                  value={amount}
+                  onChangeText={setAmount}
+                  placeholder="0"
+                  placeholderTextColor={COLORS.TEXT_TERTIARY}
+                  keyboardType="numeric"
+                />
+                <Text style={styles.bitcoinSymbol}>₿</Text>
+              </View>
             </View>
 
             {/* Quick Amounts */}
             <View style={styles.quickAmountsContainer}>
-              {quickAmounts.map((quickAmount) => (
-                <TouchableOpacity
-                  key={quickAmount}
-                  style={styles.quickAmountButton}
-                  onPress={() => setAmount(quickAmount.toString())}
-                >
-                  <Text style={styles.quickAmountText}>
-                    {quickAmount.toLocaleString()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              <Text style={styles.quickAmountsTitle}>Quick amounts</Text>
+              <View style={styles.quickAmountsGrid}>
+                {quickAmounts.map((quickAmount) => (
+                  <TouchableOpacity
+                    key={quickAmount}
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmount(quickAmount.toString())}
+                  >
+                    <Text style={styles.quickAmountText}>
+                      {quickAmount.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             {/* Send Button */}
             <TouchableOpacity
               style={[
                 styles.sendButton,
-                (!address.trim() || !amount.trim() || Number(amount) <= 0 || sending) && styles.sendButtonDisabled
+                (!address.trim() || !amount.trim() || sending) && styles.sendButtonDisabled
               ]}
               onPress={sendTransaction}
-              disabled={!address.trim() || !amount.trim() || Number(amount) <= 0 || sending}
+              disabled={!address.trim() || !amount.trim() || sending}
             >
               <Text style={styles.sendButtonText}>
-                {sending ? 'Sending...' : `Send ${mode === 'lightning' ? '⚡' : '🚀'}`}
+                {sending ? 'Sending...' : 'Send Bitcoin'}
               </Text>
             </TouchableOpacity>
 
@@ -281,35 +250,6 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.XL,
   },
   
-  modeContainer: {
-    flexDirection: 'row',
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: 4,
-    marginBottom: SPACING.XL,
-  },
-  
-  modeButton: {
-    flex: 1,
-    paddingVertical: SPACING.MD,
-    alignItems: 'center',
-    borderRadius: RADIUS.MD,
-  },
-  
-  activeModeButton: {
-    backgroundColor: COLORS.PRIMARY,
-  },
-  
-  modeText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.TEXT_SECONDARY,
-  },
-  
-  activeModeText: {
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
   inputContainer: {
     marginBottom: SPACING.XL,
   },
@@ -350,10 +290,16 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_SECONDARY,
   },
   
-  amountInput: {
+  amountInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.SURFACE,
     borderRadius: RADIUS.MD,
     padding: SPACING.MD,
+  },
+  
+  amountInput: {
+    flex: 1,
     fontSize: 24,
     fontWeight: '600',
     color: COLORS.TEXT_PRIMARY,
@@ -361,18 +307,28 @@ const styles = StyleSheet.create({
     height: 80,
   },
   
-  unitText: {
-    textAlign: 'center',
-    fontSize: 14,
-    color: COLORS.TEXT_SECONDARY,
-    marginTop: SPACING.SM,
+  bitcoinSymbol: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    marginLeft: SPACING.SM,
   },
   
   quickAmountsContainer: {
+    marginBottom: SPACING.XL,
+  },
+  
+  quickAmountsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.SM,
+  },
+  
+  quickAmountsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.SM,
-    marginBottom: SPACING.XL,
   },
   
   quickAmountButton: {

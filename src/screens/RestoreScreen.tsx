@@ -65,7 +65,7 @@ export default function RestoreScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const response = await fetch('http://192.168.18.74:8080/restore-wallet', {
+      const response = await fetch('http://172.20.10.3:8080/restore-wallet', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mnemonic: mnemonic.trim() }),

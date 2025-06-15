@@ -9,7 +9,10 @@ import {
   Alert,
   StatusBar,
   Animated,
+  Modal,
+  TextInput,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
@@ -37,6 +40,12 @@ interface Transaction {
   amount: number;
   confirmations: number;
   timestamp?: number;
+  note?: string;
+}
+
+interface TransactionNote {
+  txid: string;
+  note: string;
 }
 
 export default function TransactionScreen({ navigation, route }: Props) {
@@ -45,9 +54,16 @@ export default function TransactionScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [btcPrice, setBtcPrice] = useState<number>(0);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [noteText, setNoteText] = useState('');
+
+  const NOTES_STORAGE_KEY = `@transaction_notes_${walletId}`;
 
   useEffect(() => {
     fetchTransactions();
+    fetchBtcPrice();
     
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -56,9 +72,70 @@ export default function TransactionScreen({ navigation, route }: Props) {
     }).start();
   }, []);
 
+  const fetchBtcPrice = async () => {
+    try {
+      // Try Coinbase API first
+      const response = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=BTC');
+      const data = await response.json();
+      
+      if (data && data.data && data.data.rates && data.data.rates.USD) {
+        const usdRate = parseFloat(data.data.rates.USD);
+        setBtcPrice(usdRate);
+        console.log('BTC price fetched successfully:', usdRate);
+        return;
+      }
+    } catch (error) {
+      console.log('Coinbase API failed:', error);
+    }
+
+    try {
+      // Fallback to CoinGecko API
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
+      const data = await response.json();
+      
+      if (data && data.bitcoin && data.bitcoin.usd) {
+        const usdRate = data.bitcoin.usd;
+        setBtcPrice(usdRate);
+        console.log('BTC price fetched from CoinGecko:', usdRate);
+        return;
+      }
+    } catch (error) {
+      console.log('CoinGecko API failed:', error);
+    }
+
+    console.log('All BTC price APIs failed - USD conversion disabled');
+  };
+
+  const loadTransactionNotes = async () => {
+    try {
+      const storedNotes = await AsyncStorage.getItem(NOTES_STORAGE_KEY);
+      return storedNotes ? JSON.parse(storedNotes) : [];
+    } catch (error) {
+      return [];
+    }
+  };
+
+  const saveTransactionNote = async (txid: string, note: string) => {
+    try {
+      const existingNotes: TransactionNote[] = await loadTransactionNotes();
+      const updatedNotes = existingNotes.filter(n => n.txid !== txid);
+      if (note.trim()) {
+        updatedNotes.push({ txid, note: note.trim() });
+      }
+      await AsyncStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes));
+      
+      // Update local transactions with note
+      setTransactions(prev => prev.map(tx => 
+        tx.txid === txid ? { ...tx, note: note.trim() } : tx
+      ));
+    } catch (error) {
+      Alert.alert('Error', 'Could not save note');
+    }
+  };
+
   const fetchTransactions = async () => {
     try {
-      const response = await fetch('http://192.168.18.74:8080/get-transactions', {
+      const response = await fetch('http://172.20.10.3:8080/get-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: walletId }),
@@ -67,7 +144,20 @@ export default function TransactionScreen({ navigation, route }: Props) {
       const result = await response.json();
 
       if (result.success) {
-        setTransactions(result.data);
+        // Load saved notes
+        const savedNotes: TransactionNote[] = await loadTransactionNotes();
+        const notesMap = savedNotes.reduce((acc, note) => {
+          acc[note.txid] = note.note;
+          return acc;
+        }, {} as Record<string, string>);
+
+        // Merge transactions with notes
+        const transactionsWithNotes = result.data.map((tx: Transaction) => ({
+          ...tx,
+          note: notesMap[tx.txid] || ''
+        }));
+
+        setTransactions(transactionsWithNotes);
       } else {
         Alert.alert('Failed to Load', 'Unable to fetch transaction history');
       }
@@ -81,12 +171,20 @@ export default function TransactionScreen({ navigation, route }: Props) {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchTransactions();
+    await fetchBtcPrice();
     setRefreshing(false);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const formatSats = (sats: number) => {
     return sats.toLocaleString();
+  };
+
+  const formatUSD = (sats: number) => {
+    if (!btcPrice) return '';
+    const btcAmount = sats / 100000000; // Convert sats to BTC
+    const usdAmount = btcAmount * btcPrice;
+    return `$${usdAmount.toFixed(2)}`;
   };
 
   const formatDate = (timestamp?: number) => {
@@ -108,6 +206,23 @@ export default function TransactionScreen({ navigation, route }: Props) {
 
   const getAmountColor = (amount: number) => {
     return amount > 0 ? COLORS.SUCCESS : COLORS.TEXT_PRIMARY;
+  };
+
+  const openNoteModal = (tx: Transaction) => {
+    setSelectedTx(tx);
+    setNoteText(tx.note || '');
+    setShowNoteModal(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const saveNote = async () => {
+    if (!selectedTx) return;
+    
+    await saveTransactionNote(selectedTx.txid, noteText);
+    setShowNoteModal(false);
+    setSelectedTx(null);
+    setNoteText('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   return (
@@ -180,7 +295,12 @@ export default function TransactionScreen({ navigation, route }: Props) {
                   const statusInfo = getStatusInfo(tx.confirmations);
                   
                   return (
-                    <View key={tx.txid} style={styles.transactionCard}>
+                    <TouchableOpacity 
+                      key={tx.txid} 
+                      style={styles.transactionCard}
+                      onPress={() => openNoteModal(tx)}
+                      activeOpacity={0.7}
+                    >
                       <View style={styles.transactionContent}>
                         <View style={styles.transactionLeft}>
                           <View style={styles.iconContainer}>
@@ -190,28 +310,48 @@ export default function TransactionScreen({ navigation, route }: Props) {
                           </View>
                           
                           <View style={styles.transactionInfo}>
-                            <Text style={styles.transactionType}>
-                              {tx.amount > 0 ? 'Received' : 'Sent'}
-                            </Text>
+                            <View style={styles.transactionHeader}>
+                              <Text style={styles.transactionType}>
+                                {tx.amount > 0 ? 'Received' : 'Sent'}
+                              </Text>
+                              {tx.note && (
+                                <View style={styles.noteIndicator}>
+                                  <Text style={styles.noteIndicatorText}>📝</Text>
+                                </View>
+                              )}
+                            </View>
                             <Text style={styles.transactionDate}>
                               {formatDate(tx.timestamp)}
                             </Text>
+                            {tx.note && (
+                              <Text style={styles.notePreview} numberOfLines={1}>
+                                {tx.note}
+                              </Text>
+                            )}
                           </View>
                         </View>
 
                         <View style={styles.transactionRight}>
-                          <Text style={[
-                            styles.transactionAmount,
-                            { color: getAmountColor(tx.amount) }
-                          ]}>
-                            {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))}
-                          </Text>
+                          <View style={styles.amountRow}>
+                            <Text style={[
+                              styles.transactionAmount,
+                              { color: getAmountColor(tx.amount) }
+                            ]}>
+                              {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))}
+                            </Text>
+                            <Text style={styles.bitcoinSymbol}>₿</Text>
+                          </View>
+                          {btcPrice > 0 && (
+                            <Text style={styles.transactionUSD}>
+                              {formatUSD(Math.abs(tx.amount))}
+                            </Text>
+                          )}
                           <Text style={[styles.statusText, { color: statusInfo.color }]}>
                             {statusInfo.status}
                           </Text>
                         </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
@@ -219,6 +359,70 @@ export default function TransactionScreen({ navigation, route }: Props) {
           )}
         </Animated.View>
       </ScrollView>
+
+      {/* Note Modal */}
+      <Modal
+        visible={showNoteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowNoteModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Transaction Note</Text>
+            
+            {selectedTx && (
+              <View style={styles.transactionSummary}>
+                <View style={styles.summaryAmountRow}>
+                  <Text style={styles.summaryAmount}>
+                    {selectedTx.amount > 0 ? '+' : ''}{formatSats(Math.abs(selectedTx.amount))}
+                  </Text>
+                  <Text style={styles.summaryBitcoinSymbol}>₿</Text>
+                </View>
+                {btcPrice > 0 && (
+                  <Text style={styles.summaryUSD}>
+                    {formatUSD(Math.abs(selectedTx.amount))}
+                  </Text>
+                )}
+                <Text style={styles.summaryDate}>
+                  {formatDate(selectedTx.timestamp)}
+                </Text>
+              </View>
+            )}
+            
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Add a note for this transaction..."
+              placeholderTextColor={COLORS.TEXT_TERTIARY}
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              autoFocus
+              maxLength={200}
+            />
+            
+            <Text style={styles.characterCount}>
+              {noteText.length}/200
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={() => setShowNoteModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={saveNote}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -372,6 +576,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   
+  transactionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.MD,
+  },
+  
   transactionType: {
     fontSize: 16,
     fontWeight: '600',
@@ -388,13 +598,141 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.XS,
+  },
+  
   transactionAmount: {
     fontSize: 16,
     fontWeight: '600',
   },
   
+  bitcoinSymbol: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  transactionUSD: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
   statusText: {
     fontSize: 12,
     fontWeight: '500',
+  },
+  
+  noteIndicator: {
+    backgroundColor: COLORS.SUCCESS,
+    borderRadius: 12,
+    padding: 2,
+  },
+  
+  noteIndicatorText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.BACKGROUND,
+  },
+  
+  notePreview: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  modalContent: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    width: '80%',
+    maxHeight: '80%',
+  },
+  
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.MD,
+  },
+  
+  transactionSummary: {
+    marginBottom: SPACING.MD,
+  },
+  
+  summaryAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.XS,
+  },
+  
+  summaryAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  summaryBitcoinSymbol: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  summaryUSD: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  summaryDate: {
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  noteInput: {
+    flex: 1,
+    padding: SPACING.MD,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  characterCount: {
+    alignSelf: 'flex-end',
+    fontSize: 12,
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.MD,
+  },
+  
+  cancelButton: {
+    backgroundColor: COLORS.TEXT_TERTIARY,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+  },
+  
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.BACKGROUND,
+  },
+  
+  saveButton: {
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+  },
+  
+  saveButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.BACKGROUND,
   },
 }); 
