@@ -135,7 +135,7 @@ export default function TransactionScreen({ navigation, route }: Props) {
 
   const fetchTransactions = async () => {
     try {
-      const response = await fetch('http://172.20.10.3:8080/get-transactions', {
+      const response = await fetch('http://10.0.101.247:8080/get-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: walletId }),

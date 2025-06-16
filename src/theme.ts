@@ -2,10 +2,10 @@
 // Inspired by modern fintech apps with graffiti aesthetics
 
 export const COLORS = {
-  // Dark theme palette
-  BACKGROUND: '#0D0D0D', // Deep black
-  SURFACE: '#1A1A1A', // Dark gray for cards
-  SURFACE_ELEVATED: '#2A2A2A', // Slightly lighter for elevated elements
+  // Dark theme palette - Updated to match skibidi aesthetic
+  BACKGROUND: '#0F0F0F', // Slightly lighter deep black for better contrast with gray
+  SURFACE: '#1C1C1C', // Slightly warmer dark gray for cards
+  SURFACE_ELEVATED: '#2D2D2D', // Closer to skibidi gray family
   OVERLAY: 'rgba(0, 0, 0, 0.8)',
   
   // Text colors
@@ -14,11 +14,12 @@ export const COLORS = {
   TEXT_TERTIARY: '#666666', // Darker gray
   TEXT_INVERSE: '#0D0D0D', // Black text for light backgrounds
   
-  // Accent colors - Inspired by the reference app
-  PRIMARY: '#FF3B82', // Bright pink/magenta
-  SECONDARY: '#8B5CF6', // Purple
-  ACCENT: '#06FFA5', // Bright mint green
-  ACCENT_SECONDARY: '#FDE047', // Bright yellow
+  // Accent colors - Updated sophisticated palette
+  PRIMARY: '#535353', // Skibidi gray - main brand color
+  SECONDARY: '#7C3AED', // Deep purple - premium feel
+  ACCENT: '#06FFA5', // Bright mint green - success/money
+  ACCENT_SECONDARY: '#F59E0B', // Amber - warnings/highlights
+  BITCOIN_ORANGE: '#FF8C00', // Bitcoin orange for send button
   
   // Status colors
   SUCCESS: '#22C55E',
@@ -26,30 +27,31 @@ export const COLORS = {
   ERROR: '#EF4444',
   INFO: '#3B82F6',
   
-  // Interactive elements
-  BUTTON_PRIMARY: '#FF3B82',
+  // Interactive elements - Updated to use new palette
+  BUTTON_PRIMARY: '#535353', // Skibidi gray
   BUTTON_SECONDARY: '#2A2A2A',
   BUTTON_SUCCESS: '#22C55E',
   BUTTON_DANGER: '#EF4444',
+  BUTTON_BITCOIN: '#FF8C00', // Bitcoin orange button
   
   // Borders
   BORDER_LIGHT: '#333333',
   BORDER_MEDIUM: '#555555',
-  BORDER_ACCENT: '#FF3B82',
+  BORDER_ACCENT: '#535353', // Updated to skibidi gray
   
-  // Gradients
-  GRADIENT_PINK: ['#FF3B82', '#EC4899'],
+  // Gradients - Updated to remove pink
+  GRADIENT_GRAY: ['#535353', '#404040'], // Skibidi gray gradient
   GRADIENT_PURPLE: ['#8B5CF6', '#7C3AED'],
   GRADIENT_GREEN: ['#06FFA5', '#22C55E'],
-  GRADIENT_DARK: ['#1A1A1A', '#0D0D0D'],
+  GRADIENT_DARK: ['#1C1C1C', '#0F0F0F'], // Updated to match new background
 };
 
 export const GRADIENTS = {
-  PRIMARY: ['#FF3B82', '#EC4899'] as const,
+  PRIMARY: ['#535353', '#404040'] as const, // Updated to gray gradient
   SECONDARY: ['#8B5CF6', '#7C3AED'] as const,
   ACCENT: ['#06FFA5', '#22C55E'] as const,
-  BACKGROUND: ['#0D0D0D', '#1A1A1A'] as const,
-  CARD: ['#1A1A1A', '#2A2A2A'] as const,
+  BACKGROUND: ['#0F0F0F', '#1C1C1C'] as const, // Updated to match new background
+  CARD: ['#1C1C1C', '#2D2D2D'] as const, // Updated to match new surface colors
 };
 
 export const TYPOGRAPHY = {
@@ -99,10 +101,10 @@ export const RADIUS = {
 };
 
 export const SHADOWS = {
-  GLOW_PINK: {
-    shadowColor: '#FF3B82',
+  GLOW_GRAY: {
+    shadowColor: '#535353',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 8,
   },
@@ -135,7 +137,7 @@ export const BUTTON_STYLES = {
   
   primary: {
     backgroundColor: COLORS.BUTTON_PRIMARY,
-    ...SHADOWS.GLOW_PINK,
+    ...SHADOWS.GLOW_GRAY,
   },
   
   secondary: {
@@ -189,7 +191,7 @@ export const CARD_STYLES = {
     padding: SPACING.LG,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY,
-    ...SHADOWS.GLOW_PINK,
+    ...SHADOWS.GLOW_GRAY,
   },
 };
 

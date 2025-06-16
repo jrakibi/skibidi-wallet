@@ -37,8 +37,6 @@ const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
 export default function WalletManagerScreen({ navigation }: Props) {
   const [wallets, setWallets] = useState<WalletData[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newWalletName, setNewWalletName] = useState('');
   const [loading, setLoading] = useState(true);
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -79,51 +77,14 @@ export default function WalletManagerScreen({ navigation }: Props) {
     }
   };
 
-  const createNewWallet = async () => {
-    if (!newWalletName.trim()) {
-      Alert.alert('Name Required', 'Enter wallet name');
-      return;
-    }
-
-    setLoading(true);
+  const navigateToCreateWallet = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    try {
-      const res = await fetch('http://172.20.10.3:8080/create-wallet', {
-        method: 'POST',
-      });
-      const json = await res.json();
-
-      if (json.success) {
-        const newWallet: WalletData = {
-          id: json.data.wallet_id,
-          name: newWalletName.trim(),
-          address: json.data.address,
-          mnemonic: json.data.mnemonic,
-          balance: 0,
-          createdAt: new Date().toISOString(),
-        };
-
-        const updatedWallets = [...wallets, newWallet];
-        await saveWallets(updatedWallets);
-        setShowAddModal(false);
-        setNewWalletName('');
-        
-        // Navigate to backup screen to show seed phrase
-        navigation.navigate('Backup', { mnemonic: json.data.mnemonic });
-      } else {
-        Alert.alert('Failed', 'Could not create wallet');
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Connection failed');
-    } finally {
-      setLoading(false);
-    }
+    navigation.navigate('CreateWallet');
   };
 
   const selectWallet = (wallet: WalletData) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('Wallet', { walletData: wallet });
+    navigation.navigate('Home', { selectedWallet: wallet });
   };
 
   const deleteWallet = (walletId: string, walletName: string) => {
@@ -220,7 +181,7 @@ export default function WalletManagerScreen({ navigation }: Props) {
           <View style={styles.actionsContainer}>
             <TouchableOpacity
               style={styles.primaryButton}
-              onPress={() => setShowAddModal(true)}
+              onPress={navigateToCreateWallet}
             >
               <Text style={styles.primaryButtonText}>Create Wallet</Text>
             </TouchableOpacity>
@@ -241,48 +202,6 @@ export default function WalletManagerScreen({ navigation }: Props) {
           </View>
         </ScrollView>
       </Animated.View>
-
-      {/* Add Wallet Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>New Wallet</Text>
-            
-            <TextInput
-              style={styles.textInput}
-              placeholder="Wallet name"
-              placeholderTextColor={COLORS.TEXT_TERTIARY}
-              value={newWalletName}
-              onChangeText={setNewWalletName}
-              autoFocus
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => {
-                  setShowAddModal(false);
-                  setNewWalletName('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.createButton}
-                onPress={createNewWallet}
-              >
-                <Text style={styles.createButtonText}>Create</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -436,77 +355,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: COLORS.PRIMARY,
-  },
-  
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.LG,
-  },
-  
-  modalContent: {
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: SPACING.XL,
-    width: '100%',
-    maxWidth: 300,
-    gap: SPACING.LG,
-  },
-  
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-    textAlign: 'center',
-  },
-  
-  textInput: {
-    backgroundColor: COLORS.BACKGROUND,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.MD,
-    fontSize: 16,
-    color: COLORS.TEXT_PRIMARY,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT,
-  },
-  
-  modalButtons: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
-  },
-  
-  cancelButton: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
-    borderRadius: RADIUS.MD,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT,
-  },
-  
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  createButton: {
-    flex: 1,
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: RADIUS.MD,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  
-  createButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
   },
   
   deleteButton: {

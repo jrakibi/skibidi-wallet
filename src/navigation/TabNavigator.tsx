@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet, Image } from 'react-native';
 import HomeScreen from '../screens/HomeScreen';
 import EducationScreen from '../screens/EducationScreen';
 import { COLORS, SPACING, RADIUS } from '../theme';
@@ -12,11 +12,19 @@ export type TabParamList = {
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
-const TabIcon = ({ focused, icon }: { focused: boolean; icon: string }) => (
-  <View style={[styles.tabIcon, focused && styles.tabIconFocused]}>
-    <Text style={[styles.tabIconText, focused && styles.tabIconTextFocused]}>
-      {icon}
-    </Text>
+const TabIcon = ({ focused, icon, iconType = 'text' }: { focused: boolean; icon: string | any; iconType?: 'text' | 'image' }) => (
+  <View style={styles.tabIcon}>
+    {iconType === 'image' ? (
+      <Image 
+        source={icon} 
+        style={styles.tabIconImage} 
+        resizeMode="contain"
+      />
+    ) : (
+      <Text style={[styles.tabIconText, focused && styles.tabIconTextFocused]}>
+        {icon}
+      </Text>
+    )}
   </View>
 );
 
@@ -43,7 +51,11 @@ export default function TabNavigator() {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.tabItem}>
-              <TabIcon focused={focused} icon="🏠" />
+              <TabIcon 
+                focused={focused} 
+                icon={require('../../assets/icons/home.png')} 
+                iconType="image" 
+              />
               <TabLabel focused={focused} label="Home" />
             </View>
           ),
@@ -55,7 +67,11 @@ export default function TabNavigator() {
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.tabItem}>
-              <TabIcon focused={focused} icon="🎓" />
+              <TabIcon 
+                focused={focused} 
+                icon={require('../../assets/icons/learn.png')} 
+                iconType="image" 
+              />
               <TabLabel focused={focused} label="Learn" />
             </View>
           ),
@@ -100,6 +116,11 @@ const styles = StyleSheet.create({
   
   tabIconTextFocused: {
     fontSize: 18,
+  },
+
+  tabIconImage: {
+    width: 28,
+    height: 28,
   },
   
   tabLabel: {

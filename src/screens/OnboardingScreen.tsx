@@ -8,6 +8,7 @@ import {
   Dimensions,
   StatusBar,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
@@ -29,26 +30,52 @@ type Props = {
 };
 
 const { height } = Dimensions.get('window');
+const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
 export default function OnboardingScreen({ navigation }: Props) {
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: ANIMATIONS.MEDIUM,
-      useNativeDriver: true,
-    }).start();
+    checkExistingWallets();
   }, []);
+
+  const checkExistingWallets = async () => {
+    try {
+      const storedWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      if (storedWallets) {
+        const wallets = JSON.parse(storedWallets);
+        if (wallets.length > 0) {
+          // If wallets exist, go directly to MainTabs
+          navigation.replace('MainTabs');
+          return;
+        }
+      }
+      
+      // If no wallets exist, show onboarding screen
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: ANIMATIONS.MEDIUM,
+        useNativeDriver: true,
+      }).start();
+    } catch (error) {
+      console.error('Error checking existing wallets:', error);
+      // On error, show onboarding screen
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: ANIMATIONS.MEDIUM,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
 
   const createNewWallet = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('MainTabs');
+    navigation.navigate('CreateWallet');
   };
 
   const restoreWallet = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('MainTabs');
+    navigation.navigate('Restore');
   };
 
   return (
