@@ -1,14 +1,25 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text, View, StyleSheet, Image } from 'react-native';
+import { Text, View, StyleSheet, Image, TouchableOpacity, Alert } from 'react-native';
+import { CompositeNavigationProp, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Haptics from 'expo-haptics';
 import HomeScreen from '../screens/HomeScreen';
 import EducationScreen from '../screens/EducationScreen';
+import { RootStackParamList, WalletData } from '../../App';
 import { COLORS, SPACING, RADIUS } from '../theme';
 
 export type TabParamList = {
   HomeTab: undefined;
+  SendTab: undefined;
   LearnTab: undefined;
 };
+
+type TabNavigationProp = CompositeNavigationProp<
+  StackNavigationProp<RootStackParamList>,
+  StackNavigationProp<TabParamList>
+>;
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
@@ -34,20 +45,111 @@ const TabLabel = ({ focused, label }: { focused: boolean; label: string }) => (
   </Text>
 );
 
+const WALLETS_STORAGE_KEY = '@skibidi_wallets';
+
+// Custom Tab Bar Component
+const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+  const rootNavigation = useNavigation<TabNavigationProp>();
+  
+  const navigateToSend = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      // Use the same storage key as HomeScreen
+      const walletsJson = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      
+      if (!walletsJson) {
+        Alert.alert('No Wallet', 'Please create a wallet first');
+        return;
+      }
+      
+      const wallets: WalletData[] = JSON.parse(walletsJson);
+      
+      if (wallets.length === 0) {
+        Alert.alert('No Wallet', 'Please create a wallet first');
+        return;
+      }
+      
+      // Use the first wallet (same logic as HomeScreen when no specific wallet is selected)
+      rootNavigation.navigate('Send', { walletId: wallets[0].id });
+      
+    } catch (error) {
+      console.error('Error navigating to send:', error);
+      Alert.alert('Error', 'Failed to open send screen');
+    }
+  };
+
+  return (
+    <View style={styles.customTabBar}>
+      {state.routes.map((route: any, index: number) => {
+        const { options } = descriptors[route.key];
+        const isFocused = state.index === index;
+
+        // Handle the middle send button differently
+        if (index === 1) {
+          return (
+            <TouchableOpacity
+              key={route.key}
+              style={styles.sendButtonContainer}
+              onPress={navigateToSend}
+              activeOpacity={0.8}
+            >
+              <View style={styles.sendButton}>
+                <Image 
+                  source={require('../../assets/icons/send.png')}
+                  style={styles.sendButtonImage}
+                  resizeMode="contain"
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        }
+
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+
+        return (
+          <TouchableOpacity
+            key={route.key}
+            style={styles.regularTabButton}
+            onPress={onPress}
+            activeOpacity={0.7}
+          >
+            {options.tabBarIcon({ focused: isFocused })}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+// Wrapper components that are compatible with tab navigator
+const HomeTabScreen = (props: any) => <HomeScreen {...props} />;
+const LearnTabScreen = (props: any) => <EducationScreen {...props} />;
+
+// Dummy component for middle tab (won't be rendered)
+const DummySendScreen = () => <View />;
+
 export default function TabNavigator() {
   return (
     <Tab.Navigator
+      tabBar={(props) => <CustomTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
-        tabBarActiveTintColor: COLORS.PRIMARY,
-        tabBarInactiveTintColor: COLORS.TEXT_SECONDARY,
       }}
     >
       <Tab.Screen
         name="HomeTab"
-        component={HomeScreen}
+        component={HomeTabScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.tabItem}>
@@ -62,8 +164,15 @@ export default function TabNavigator() {
         }}
       />
       <Tab.Screen
+        name="SendTab"
+        component={DummySendScreen}
+        options={{
+          tabBarIcon: () => null, // This won't be used due to custom tab bar
+        }}
+      />
+      <Tab.Screen
         name="LearnTab"
-        component={EducationScreen}
+        component={LearnTabScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <View style={styles.tabItem}>
@@ -89,6 +198,55 @@ const styles = StyleSheet.create({
     height: 80,
     paddingBottom: 20,
     paddingTop: 10,
+  },
+  
+  // Custom Tab Bar Styles
+  customTabBar: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.SURFACE,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.BORDER_LIGHT,
+    height: 80,
+    paddingBottom: 20,
+    paddingTop: 10,
+    alignItems: 'center',
+    justifyContent: 'space-around',
+  },
+  
+  regularTabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  sendButtonContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  sendButton: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#2A2A2A', // Dark gray background
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 25, // This pushes it up outside the tab bar
+    elevation: 12,
+    shadowColor: '#FF6B35', // Orange glow effect
+    shadowOffset: {
+      width: 0,
+      height: 6,
+    },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    borderWidth: 3,
+    borderColor: COLORS.SURFACE,
+  },
+  
+  sendButtonImage: {
+    width: 85, // Large image that overflows the 72px circle
+    height: 85,
   },
   
   tabItem: {

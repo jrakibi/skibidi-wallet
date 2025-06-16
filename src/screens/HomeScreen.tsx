@@ -226,7 +226,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     
     try {
       // Fetch balance
-      const balanceRes = await fetch('http://10.0.101.247:8080/get-balance', {
+      const balanceRes = await fetch('http://192.168.1.10:8080/get-balance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: selectedWallet.id }),
@@ -246,7 +246,7 @@ export default function HomeScreen({ navigation, route }: Props) {
       }
 
       // Fetch transactions
-      const txRes = await fetch('http://10.0.101.247:8080/get-transactions', {
+      const txRes = await fetch('http://192.168.1.10:8080/get-transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: selectedWallet.id }),
@@ -439,34 +439,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     }
   };
 
-  const renderTransaction = (tx: Transaction, index: number) => (
-    <View key={tx.txid} style={styles.transactionItem}>
-      <View style={styles.transactionIcon}>
-        <Text style={styles.transactionIconText}>
-          {tx.amount > 0 ? '↙' : '↗'}
-        </Text>
-      </View>
-      <View style={styles.transactionDetails}>
-        <Text style={styles.transactionType}>
-          {tx.amount > 0 ? 'Received' : 'Sent'}
-        </Text>
-        <Text style={styles.transactionTime}>
-          {tx.timestamp ? new Date(tx.timestamp * 1000).toLocaleDateString() : 'Pending'}
-        </Text>
-      </View>
-      <View style={styles.transactionAmount}>
-        <Text style={[
-          styles.transactionAmountText,
-          { color: tx.amount > 0 ? COLORS.SUCCESS : COLORS.TEXT_PRIMARY }
-        ]}>
-          {tx.amount > 0 ? '+' : ''}{formatSats(Math.abs(tx.amount))} BTC
-        </Text>
-        <Text style={styles.transactionAmountUSD}>
-          {formatUSD(Math.abs(tx.amount))}
-        </Text>
-      </View>
-    </View>
-  );
+
 
   // Add debug function to check wallet status
   const debugWalletStatus = async () => {
@@ -477,7 +450,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     // Test each wallet with the backend
     for (const wallet of wallets) {
       try {
-        const response = await fetch('http://10.0.101.247:8080/get-balance', {
+        const response = await fetch('http://192.168.1.10:8080/get-balance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet_id: wallet.id }),
@@ -495,7 +468,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     // Create smooth circular floating motion
     const createCircularFloatingSequence = () => {
       const radius = 6; // Circle radius in pixels
-      const duration = 12000; // 12 seconds for full circle (slower)
+      const duration = 6000; // 6 seconds for full circle (faster)
       
       return Animated.loop(
         Animated.timing(new Animated.Value(0), {
@@ -513,7 +486,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     Animated.loop(
       Animated.timing(circleProgress, {
         toValue: 1,
-        duration: 12000, // 12 seconds for full circle (slower)
+        duration: 6000, // 6 seconds for full circle (faster)
         useNativeDriver: true,
       })
     ).start();
@@ -663,18 +636,18 @@ export default function HomeScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Recent Transactions */}
-        {transactions.length > 0 && (
-          <Animated.View style={[styles.transactionsSection, { transform: [{ translateY: slideAnim }] }]}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Transaction History</Text>
-            </View>
-            
-            <View style={styles.transactionsList}>
-              {transactions.map((tx, index) => renderTransaction(tx, index))}
-            </View>
-          </Animated.View>
-        )}
+        {/* Transaction History Link */}
+        <Animated.View style={[styles.historyLinkContainer, { transform: [{ translateY: slideAnim }] }]}>
+          <TouchableOpacity 
+            style={styles.historyLink}
+            onPress={() => navigation.navigate('Transactions', { walletId: selectedWallet.id })}
+          >
+            <Text style={styles.historyLinkText}>View Transaction History</Text>
+            <Text style={styles.historyLinkIcon}>→</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+
       </Animated.ScrollView>
 
       {/* Bottom Sheet Wallet Modal */}
@@ -886,72 +859,29 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_TERTIARY,
   },
 
-  // Transactions Section
-  transactionsSection: {
+  // History Link
+  historyLinkContainer: {
     marginHorizontal: SPACING.LG,
     marginBottom: SPACING.XL,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: SPACING.MD,
   },
-  sectionTitle: {
-    fontSize: TYPOGRAPHY.SUBTITLE,
-    fontWeight: TYPOGRAPHY.SEMIBOLD,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  transactionsList: {
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    overflow: 'hidden',
-  },
-  transactionItem: {
+  historyLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: SPACING.LG,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER_LIGHT,
+    paddingVertical: SPACING.SM,
+    paddingHorizontal: SPACING.MD,
   },
-  transactionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.SURFACE_ELEVATED,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.MD,
-  },
-  transactionIconText: {
-    fontSize: 18,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  transactionDetails: {
-    flex: 1,
-  },
-  transactionType: {
+  historyLinkText: {
     fontSize: TYPOGRAPHY.BODY,
-    fontWeight: TYPOGRAPHY.MEDIUM,
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: SPACING.XS / 2,
+    color: COLORS.TEXT_SECONDARY,
+    marginRight: SPACING.XS,
   },
-  transactionTime: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_TERTIARY,
+  historyLinkIcon: {
+    fontSize: 12,
+    color: COLORS.TEXT_SECONDARY,
   },
-  transactionAmount: {
-    alignItems: 'flex-end',
-  },
-  transactionAmountText: {
-    fontSize: TYPOGRAPHY.BODY,
-    fontWeight: TYPOGRAPHY.SEMIBOLD,
-    marginBottom: SPACING.XS / 2,
-  },
-  transactionAmountUSD: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_TERTIARY,
-  },
+
+
 
   // Bottom Sheet Modal
   bottomSheetOverlay: {

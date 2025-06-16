@@ -21,8 +21,10 @@ import { RootStackParamList } from '../../App';
 import { 
   COLORS, 
   SPACING, 
-  TYPOGRAPHY
+  TYPOGRAPHY,
+  RADIUS
 } from '../theme';
+import QRCode from 'react-native-qrcode-svg';
 
 type SendScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Send'>;
 type SendScreenRouteProp = RouteProp<RootStackParamList, 'Send'>;
@@ -40,7 +42,7 @@ export default function SendScreen({ navigation, route }: Props) {
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [showUSD, setShowUSD] = useState(false);
-  const [animationPhase, setAnimationPhase] = useState<'idle' | 'animating' | 'success'>('idle');
+  const [animationPhase, setAnimationPhase] = useState<'idle' | 'animating' | 'success' | 'printing' | 'receipt'>('idle');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   
   // Bitcoin price (you might want to fetch this from an API)
@@ -100,6 +102,11 @@ export default function SendScreen({ navigation, route }: Props) {
   const skibidiScaleAnim = useRef(new Animated.Value(1)).current; // For skibidi scaling
   const successFadeAnim = useRef(new Animated.Value(0)).current; // For success state
   const slideUpAnim = useRef(new Animated.Value(50)).current; // For sliding elements up
+  
+  // Receipt animation values
+  const receiptScaleAnim = useRef(new Animated.Value(0)).current; // For receipt zoom animation
+  const receiptOpacityAnim = useRef(new Animated.Value(0)).current; // For receipt fade in/out
+  const receiptSlideAnim = useRef(new Animated.Value(height)).current; // For receipt slide up from bottom
   
   // Ref to track when API call is complete
   const apiCompleteRef = useRef(false);
@@ -176,8 +183,35 @@ export default function SendScreen({ navigation, route }: Props) {
     setSending(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
+    // Check if it's a test address - skip real API call
+    const isTestMode = address.trim().toLowerCase() === 'test' || 
+                      address.trim().toLowerCase() === 'demo' ||
+                      address.trim() === '1TestSkibidiReceiptAnimation123456';
+
+    if (isTestMode) {
+      console.log('🧪 Test mode activated - simulating transaction...');
+      
+      // Simulate API delay
+      setTimeout(() => {
+        // API call is complete - trigger shoot up animation
+        apiCompleteRef.current = true;
+        if (shootUpRef.current) {
+          shootUpRef.current();
+        }
+        
+        // Show receipt success animation after skibidi shoots up
+        setTimeout(() => {
+          setAnimationPhase('success');
+          startReceiptAnimation();
+          // No auto navigation - stay on the animation screen
+        }, 1000);
+      }, 800); // Simulate network delay
+      
+      return;
+    }
+
     try {
-      const response = await fetch('http://10.0.101.247:8080/send-bitcoin', {
+      const response = await fetch('http://192.168.1.10:8080/send-bitcoin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -196,19 +230,11 @@ export default function SendScreen({ navigation, route }: Props) {
           shootUpRef.current();
         }
         
-        // Show success after animation completes
+        // Show receipt success animation after skibidi shoots up
         setTimeout(() => {
           setAnimationPhase('success');
-          Animated.timing(successFadeAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }).start();
-          
-          // Auto navigate back after showing success
-          setTimeout(() => {
-            navigation.goBack();
-          }, 2500);
+          startReceiptAnimation();
+          // No auto navigation - stay on the animation screen
         }, 1000); // Reduced wait time since we're now waiting for API
       } else {
         Alert.alert('Failed', result.error || 'Try again');
@@ -219,6 +245,9 @@ export default function SendScreen({ navigation, route }: Props) {
         slideUpAnim.setValue(0);
         skibidiYAnim.setValue(0);
         skibidiScaleAnim.setValue(1);
+        receiptScaleAnim.setValue(0);
+        receiptOpacityAnim.setValue(0);
+        receiptSlideAnim.setValue(height);
         apiCompleteRef.current = false;
       }
     } catch (error) {
@@ -232,8 +261,47 @@ export default function SendScreen({ navigation, route }: Props) {
       skibidiYAnim.setValue(0);
       skibidiScaleAnim.setValue(1);
       successFadeAnim.setValue(0);
+      receiptScaleAnim.setValue(0);
+      receiptOpacityAnim.setValue(0);
+      receiptSlideAnim.setValue(height);
       apiCompleteRef.current = false;
     }
+  };
+
+  const startReceiptAnimation = () => {
+    // Start with image super zoomed in (300%) and visible
+    receiptScaleAnim.setValue(3.0);
+    receiptOpacityAnim.setValue(1);
+    
+    // Zoom out from 300% to normal size and stay there
+    Animated.timing(receiptScaleAnim, {
+      toValue: 1.0,
+      duration: 800,
+      useNativeDriver: true,
+    }).start(() => {
+      // After animation completes, show printing state
+      setTimeout(() => {
+        setAnimationPhase('printing');
+        
+        // Wait additional time for "printing" then show receipt
+        setTimeout(() => {
+          setAnimationPhase('receipt');
+          startReceiptSlideAnimation();
+        }, 3000); // Wait 3 seconds during printing phase
+      }, 1500); // Hold the image for 1.5 seconds then show printing
+    });
+  };
+
+  const startReceiptSlideAnimation = () => {
+    // Start receipt at bottom of screen
+    receiptSlideAnim.setValue(height);
+    
+    // Slide up from bottom to center
+    Animated.timing(receiptSlideAnim, {
+      toValue: 0,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
   };
 
   const startSendAnimation = () => {
@@ -379,12 +447,15 @@ export default function SendScreen({ navigation, route }: Props) {
             if (animationPhase !== 'idle') {
               setAnimationPhase('idle');
               setSending(false);
-              // Reset all animations
-              uiFadeAnim.setValue(1);
-              slideUpAnim.setValue(0);
-              skibidiYAnim.setValue(0);
-              skibidiScaleAnim.setValue(1);
-              successFadeAnim.setValue(0);
+                          // Reset all animations
+            uiFadeAnim.setValue(1);
+            slideUpAnim.setValue(0);
+            skibidiYAnim.setValue(0);
+            skibidiScaleAnim.setValue(1);
+                        receiptScaleAnim.setValue(0);
+            receiptOpacityAnim.setValue(0);
+            receiptSlideAnim.setValue(height);
+            successFadeAnim.setValue(0);
             }
             navigation.goBack();
           }}
@@ -393,8 +464,8 @@ export default function SendScreen({ navigation, route }: Props) {
           <Text style={styles.backButtonText}>✕</Text>
         </TouchableOpacity>
         
-        {/* Main Content - Fade out during animation */}
-        {animationPhase !== 'animating' && (
+        {/* Main Content - Fade out during animation and hide during receipt */}
+        {animationPhase !== 'animating' && animationPhase !== 'receipt' && (
           <Animated.View style={[
             styles.content, 
             { 
@@ -480,8 +551,8 @@ export default function SendScreen({ navigation, route }: Props) {
           </Animated.View>
         )}
 
-        {/* Instructions Above Character - Fade out during animation */}
-        {animationPhase !== 'animating' && (
+        {/* Instructions Above Character - Fade out during animation and hide during receipt */}
+        {animationPhase !== 'animating' && animationPhase !== 'receipt' && (
           <Animated.View style={[
             styles.instructionAboveCharacter, 
             { 
@@ -534,20 +605,139 @@ export default function SendScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         )}
 
-        {/* Success State */}
+        {/* Success State - Receipt Animation */}
         {animationPhase === 'success' && (
-          <Animated.View style={[styles.successContainer, { opacity: successFadeAnim }]}>
-            <View style={styles.successContent}>
-              <Text style={styles.successTitle}>🚀 SENT!</Text>
-              <Text style={styles.successAmount}>
-                {Number(amount).toLocaleString()} sats
-              </Text>
-              <Text style={styles.successMessage}>
-                Transaction broadcasted successfully
-              </Text>
-            </View>
+          <Animated.View 
+            style={[
+              styles.receiptContainer, 
+              { 
+                opacity: receiptOpacityAnim,
+                transform: [{ scale: receiptScaleAnim }]
+              }
+            ]}
+          >
+            <Image 
+              source={require('../../assets/screens/receipt.png')} 
+              style={styles.receiptImage}
+              resizeMode="contain"
+            />
           </Animated.View>
         )}
+
+        {/* Printing State */}
+        {animationPhase === 'printing' && (
+          <View style={styles.printingContainer}>
+            <Image 
+              source={require('../../assets/screens/receipt.png')} 
+              style={styles.receiptImage}
+              resizeMode="contain"
+            />
+            <Text style={styles.printingText}>printing...</Text>
+          </View>
+        )}
+
+        {/* Receipt Details Screen */}
+        {animationPhase === 'receipt' && (
+          <Animated.View 
+            style={[
+              styles.receiptDetailsContainer,
+              { transform: [{ translateY: receiptSlideAnim }] }
+            ]}
+          >
+            <View style={styles.receiptPaper}>
+              {/* Receipt Header with Logo */}
+              <View style={styles.receiptHeader}>
+                <Image
+                  source={require('../../assets/brainrot/brainrot6.png')}
+                  style={styles.receiptLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.businessName}>SKIBIDI CASH</Text>
+                <Text style={styles.businessSubtitle}>Digital Payment Services</Text>
+              </View>
+              
+                              <View style={styles.solidDivider} />
+                
+                <View style={styles.transactionHeader}>
+                  <View style={styles.checkmarkContainer}>
+                    <View style={styles.checkmarkCircle}>
+                      <Text style={styles.checkmark}>✓</Text>
+                    </View>
+                    <Text style={styles.transactionStatus}>Transaction{'\n'}Successful</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.dashedDivider} />
+              
+              <View style={styles.receiptBody}>
+                <View style={styles.receiptLine}>
+                  <Text style={styles.receiptLabel}>DATE:</Text>
+                  <Text style={styles.receiptValue}>{new Date().toLocaleDateString()}</Text>
+                </View>
+                
+                <View style={styles.receiptLine}>
+                  <Text style={styles.receiptLabel}>TIME:</Text>
+                  <Text style={styles.receiptValue}>{new Date().toLocaleTimeString()}</Text>
+                </View>
+                
+                                 <View style={styles.dashedDivider} />
+                 
+                 <View style={styles.amountSection}>
+                   <Text style={styles.amountLabel}>AMOUNT SENT:</Text>
+                   <View style={styles.amountRow}>
+                     <Text style={styles.amountValue}>{Number(amount).toLocaleString()}</Text>
+                     <Text style={styles.currencyLabel}>sats</Text>
+                   </View>
+                 </View>
+                 
+                 <View style={styles.dashedDivider} />
+                
+                <View style={styles.addressSection}>
+                  <Text style={styles.receiptLabel}>TO ADDRESS:</Text>
+                  <Text style={styles.addressValue}>
+                    {address.length > 20 ? `${address.substring(0, 8)}...${address.substring(address.length - 8)}` : address}
+                  </Text>
+                </View>
+                
+                                                  <View style={styles.dashedDivider} />
+                 
+                 <View style={styles.statusSection}>
+                   <Text style={styles.receiptLabel}>STATUS:</Text>
+                   <Text style={styles.statusValue}>CONFIRMED</Text>
+                 </View>
+               </View>
+               
+               <View style={styles.solidDivider} />
+              
+              <Text style={styles.thankYouMessage}>
+                Thank you for using{'\n'}Skibidi Cash!
+              </Text>
+              
+              <View style={styles.qrCodeContainer}>
+                <QRCode
+                  value="https://bitcoindevs.xyz/"
+                  size={60}
+                  color="#000000"
+                  backgroundColor="#d1cab8"
+                />
+                <Text style={styles.qrFooter}>bitcoindevs.xyz</Text>
+              </View>
+              
+              {/* Wavy torn edge effect */}
+              <View style={styles.tornEdgeContainer}>
+                <View style={styles.waveEdge1} />
+                <View style={styles.waveEdge2} />
+                <View style={styles.waveEdge3} />
+                <View style={styles.waveEdge4} />
+                <View style={styles.waveEdge5} />
+                <View style={styles.waveEdge6} />
+                <View style={styles.waveEdge7} />
+              </View>
+            </View>
+            
+            
+            </Animated.View>
+          )}
 
       </View>
     </TouchableWithoutFeedback>
@@ -562,7 +752,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: SPACING.LG,
-    paddingTop: SPACING.LG,
+    paddingTop: SPACING.XXL,
   },
   inputSection: {
     flex: 1,
@@ -570,7 +760,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.MD,
   },
   inputGroup: {
-    marginBottom: SPACING.XXL,
+    marginBottom: SPACING.XL,
   },
   inputLabel: {
     fontSize: TYPOGRAPHY.SMALL,
@@ -583,26 +773,26 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderBottomWidth: 2,
     borderBottomColor: COLORS.BORDER_LIGHT,
-    padding: SPACING.MD,
-    fontSize: TYPOGRAPHY.BODY_LARGE,
+    padding: SPACING.SM,
+    fontSize: TYPOGRAPHY.BODY,
     color: COLORS.TEXT_PRIMARY,
-    minHeight: 50,
+    minHeight: 36,
   },
   amountContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
     borderBottomWidth: 2,
     borderBottomColor: COLORS.BORDER_LIGHT,
-    paddingHorizontal: SPACING.MD,
-    paddingVertical: SPACING.SM,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
   },
   amountInput: {
     flex: 1,
-    fontSize: TYPOGRAPHY.DISPLAY,
+    fontSize: TYPOGRAPHY.TITLE,
     fontWeight: TYPOGRAPHY.BOLD,
     color: COLORS.TEXT_PRIMARY,
     padding: 0,
-    minHeight: 50,
+    minHeight: 36,
   },
   satLabel: {
     fontSize: TYPOGRAPHY.SMALL,
@@ -736,13 +926,436 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_PRIMARY,
   },
   atmContainer: {
-    height: 300,
+    height: 220,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.MD,
+    marginBottom: SPACING.LG,
+    marginTop: SPACING.MD,
   },
   atmImage: {
-    width: 280,
-    height: 280,
+    width: 200,
+    height: 200,
+  },
+  receiptContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: COLORS.BACKGROUND, // Solid background, no transparency
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000, // Ensure it's on top
+  },
+  receiptImage: {
+    width: 400,
+    height: 400,
+    maxWidth: '90%',
+    maxHeight: '80%',
+  },
+  receiptContent: {
+    backgroundColor: COLORS.SURFACE,
+    padding: SPACING.XL,
+    borderRadius: 15,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.BITCOIN_ORANGE,
+    maxWidth: '90%',
+  },
+  receiptTitle: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.BITCOIN_ORANGE,
+    marginBottom: SPACING.SM,
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  receiptAmount: {
+    fontSize: TYPOGRAPHY.TITLE,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.SM,
+    textAlign: 'center',
+  },
+  receiptMessage: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  receiptDetailsContainer: {
+    flex: 1,
+    backgroundColor: COLORS.BACKGROUND,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.LG,
+  },
+  toiletTerminalHeader: {
+    alignItems: 'center',
+    marginBottom: SPACING.XL,
+  },
+  terminalTitle: {
+    fontSize: 32,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    letterSpacing: 4,
+  },
+  receiptPaper: {
+    backgroundColor: '#d1cab8', // Custom beige receipt color
+    borderRadius: 8,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    padding: SPACING.XL,
+    paddingHorizontal: SPACING.LG,
+    width: '85%',
+    maxWidth: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 3, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 10,
+    // Subtle border to define the receipt edges
+    borderWidth: 1,
+    borderColor: '#b8ad9a',
+    borderBottomWidth: 0,
+    // Add torn edge effect at bottom
+    position: 'relative',
+  },
+  terminalHeader: {
+    fontSize: 26,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    letterSpacing: 4,
+    marginBottom: SPACING.LG,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  checkmarkContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.LG,
+  },
+  checkmarkCircle: {
+    backgroundColor: '#1a1a1a', // Dark circle background
+    borderRadius: 18,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.MD,
+  },
+  checkmark: {
+    fontSize: 18,
+    color: '#e1af6c', // Golden checkmark for success
+    fontWeight: 'bold',
+  },
+  transactionStatus: {
+    fontSize: 22,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a', // Dark text
+    textAlign: 'left',
+  },
+  transactionDetails: {
+    marginBottom: SPACING.MD,
+  },
+  amountSentLabel: {
+    fontSize: 18,
+    color: '#1a1a1a',
+    fontWeight: TYPOGRAPHY.BOLD,
+    marginBottom: SPACING.XS,
+    textAlign: 'center',
+  },
+  btcLabel: {
+    fontSize: 36,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a',
+    marginBottom: SPACING.MD,
+    textAlign: 'center',
+    letterSpacing: 2,
+  },
+
+  addressLabel: {
+    fontSize: 14,
+    color: '#333333',
+    fontFamily: 'Courier',
+    marginBottom: SPACING.MD,
+    textAlign: 'center',
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    padding: SPACING.SM,
+    borderRadius: 4,
+  },
+  thankYouText: {
+    fontSize: 20,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    lineHeight: 28,
+    fontWeight: TYPOGRAPHY.BOLD,
+    marginVertical: SPACING.LG,
+  },
+  qrCodeContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: SPACING.SM,
+    marginBottom: SPACING.SM,
+  },
+  receiptDivider: {
+    fontSize: 12,
+    color: '#444444',
+    textAlign: 'center',
+    fontFamily: 'Courier',
+    marginVertical: SPACING.XS,
+    letterSpacing: 1,
+  },
+  receiptFooter: {
+    fontSize: 13,
+    color: '#333333',
+    textAlign: 'center',
+    marginTop: SPACING.MD,
+    fontStyle: 'italic',
+    fontWeight: '500',
+  },
+  doneReceiptButton: {
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: RADIUS.LG,
+    paddingVertical: SPACING.LG,
+    paddingHorizontal: SPACING.XL * 2,
+    marginTop: SPACING.XL,
+  },
+  doneReceiptButtonText: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+  },
+  
+  // New receipt styles
+  receiptHeader: {
+    alignItems: 'center',
+    marginBottom: SPACING.XS,
+  },
+  receiptLogo: {
+    width: 48,
+    height: 48,
+    marginBottom: 6,
+  },
+  businessName: {
+    fontSize: 18,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a',
+    letterSpacing: 2,
+    textAlign: 'center',
+  },
+  businessSubtitle: {
+    fontSize: 10,
+    color: '#666666',
+    textAlign: 'center',
+    marginTop: 1,
+  },
+  transactionHeader: {
+    alignItems: 'center',
+    marginVertical: SPACING.XS,
+  },
+  receiptBody: {
+    marginVertical: SPACING.XS,
+  },
+  receiptLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 1,
+  },
+  receiptLabel: {
+    fontSize: 10,
+    color: '#333333',
+    fontWeight: '600',
+    letterSpacing: 0.5,
+  },
+  receiptValue: {
+    fontSize: 10,
+    color: '#1a1a1a',
+    fontFamily: 'Courier',
+  },
+  amountSection: {
+    alignItems: 'center',
+    marginVertical: SPACING.XS,
+  },
+  amountLabel: {
+    fontSize: 12,
+    color: '#333333',
+    fontWeight: '600',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  amountValue: {
+    fontSize: 20,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a',
+  },
+  currencyLabel: {
+    fontSize: 14,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#1a1a1a',
+    letterSpacing: 1,
+  },
+  addressSection: {
+    alignItems: 'center',
+    marginVertical: 4,
+  },
+  addressValue: {
+    fontSize: 9,
+    color: '#333333',
+    fontFamily: 'Courier',
+    marginTop: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    padding: 4,
+    borderRadius: 4,
+    textAlign: 'center',
+  },
+  statusSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 1,
+  },
+  statusValue: {
+    fontSize: 10,
+    color: '#1a1a1a',
+    fontWeight: '600',
+    fontFamily: 'Courier',
+  },
+  thankYouMessage: {
+    fontSize: 14,
+    color: '#1a1a1a',
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '600',
+    marginVertical: SPACING.XS,
+  },
+  qrFooter: {
+    fontSize: 9,
+    color: '#333333',
+    textAlign: 'center',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  
+  // Divider styles
+  solidDivider: {
+    height: 1,
+    backgroundColor: '#333333',
+    marginVertical: 6,
+    width: '100%',
+  },
+  dashedDivider: {
+    height: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: '#666666',
+    borderStyle: 'dashed',
+    marginVertical: 4,
+    width: '100%',
+  },
+  
+  // Wavy torn edge effect
+  tornEdgeContainer: {
+    position: 'absolute',
+    bottom: -20,
+    left: 0,
+    right: 0,
+    height: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  waveEdge1: {
+    width: '15%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 50,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 0,
+  },
+  waveEdge2: {
+    width: '15%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 10,
+    borderBottomRightRadius: 90,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+  },
+  waveEdge3: {
+    width: '15%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+  },
+  waveEdge4: {
+    width: '15%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+  },
+  waveEdge5: {
+    width: '15%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+  },
+  waveEdge6: {
+    width: '18%',
+    height: 30,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 20,
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 0,
+  },
+  waveEdge7: {
+    width: '7%',
+    height: 50,
+    backgroundColor: '#d1cab8',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+  },
+  
+  // Printing state styles
+  printingContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: COLORS.BACKGROUND,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  printingText: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    letterSpacing: 1,
+    marginTop: SPACING.LG,
   },
 }); 

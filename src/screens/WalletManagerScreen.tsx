@@ -84,7 +84,7 @@ export default function WalletManagerScreen({ navigation }: Props) {
 
   const selectWallet = (wallet: WalletData) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('Home', { selectedWallet: wallet });
+    navigation.navigate('MainTabs');
   };
 
   const deleteWallet = (walletId: string, walletName: string) => {

@@ -126,7 +126,7 @@ export default function CreateWalletScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const response = await fetch('http://10.0.101.247:8080/create-wallet', {
+      const response = await fetch('http://192.168.1.10:8080/create-wallet', {
         method: 'POST',
       });
       const data = await response.json();
@@ -172,8 +172,8 @@ export default function CreateWalletScreen({ navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       setTimeout(() => {
-        // Navigate directly to Home screen with the new wallet selected
-        navigation.navigate('Home', { selectedWallet: newWallet });
+        // Navigate to MainTabs to ensure navigation bar is shown
+        navigation.navigate('MainTabs');
       }, 2000);
     } catch (error) {
       Alert.alert('Error', 'Failed to save wallet');
