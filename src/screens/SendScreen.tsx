@@ -38,7 +38,7 @@ type Props = {
 const { width, height } = Dimensions.get('window');
 
 export default function SendScreen({ navigation, route }: Props) {
-  const { walletId } = route.params;
+  const { walletId, walletMnemonic } = route.params;
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
@@ -216,7 +216,7 @@ export default function SendScreen({ navigation, route }: Props) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          wallet_id: walletId,
+          mnemonic: walletMnemonic,
           to_address: address.trim(),
           amount_sats: Number(amount),
         }),

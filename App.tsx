@@ -34,11 +34,11 @@ export type RootStackParamList = {
   Home: { selectedWallet?: WalletData } | undefined;
   WalletManager: undefined;
   CreateWallet: undefined;
-  Send: { walletId: string };
+  Send: { walletId: string; walletMnemonic: string };
   Receive: { address: string };
   Backup: { mnemonic: string };
   Restore: undefined;
-  Transactions: { walletId: string };
+  Transactions: { walletId: string; walletMnemonic: string };
   QRScanner: { onScan: (data: string) => void };
   Education: undefined;
   Lesson: { lessonId: string };

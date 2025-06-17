@@ -50,7 +50,7 @@ interface TransactionNote {
 }
 
 export default function TransactionScreen({ navigation, route }: Props) {
-  const { walletId } = route.params;
+  const { walletId, walletMnemonic } = route.params;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -139,7 +139,7 @@ export default function TransactionScreen({ navigation, route }: Props) {
       const response = await fetch(getApiUrl('/get-transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_id: walletId }),
+        body: JSON.stringify({ mnemonic: walletMnemonic }),
       });
 
       const result = await response.json();

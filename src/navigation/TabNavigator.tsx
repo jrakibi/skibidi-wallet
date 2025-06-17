@@ -55,8 +55,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
-      // Use the same storage key as HomeScreen
-      const walletsJson = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      const walletsJson = await AsyncStorage.getItem('@skibidi_wallets');
       
       if (!walletsJson) {
         Alert.alert('No Wallet', 'Please create a wallet first');
@@ -71,7 +70,7 @@ const CustomTabBar = ({ state, descriptors, navigation }: any) => {
       }
       
       // Use the first wallet (same logic as HomeScreen when no specific wallet is selected)
-      rootNavigation.navigate('Send', { walletId: wallets[0].id });
+      rootNavigation.navigate('Send', { walletId: wallets[0].id, walletMnemonic: wallets[0].mnemonic });
       
     } catch (error) {
       console.error('Error navigating to send:', error);

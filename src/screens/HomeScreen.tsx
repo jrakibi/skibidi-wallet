@@ -230,7 +230,7 @@ export default function HomeScreen({ navigation, route }: Props) {
       const balanceRes = await fetch(getApiUrl('/get-balance'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_id: selectedWallet.id }),
+        body: JSON.stringify({ mnemonic: selectedWallet.mnemonic }),
       });
       const balanceData = await balanceRes.json();
       
@@ -240,8 +240,8 @@ export default function HomeScreen({ navigation, route }: Props) {
         setBalance(balanceData.data);
       } else {
         console.error('Balance fetch failed:', balanceData.error || balanceData.message);
-        // Don't show error for wallet not found - it might be a new wallet
-        if (balanceData.error !== 'Wallet not found') {
+        // Don't show error for invalid mnemonic - it might be a corrupted wallet
+        if (!balanceData.error?.includes('Invalid mnemonic')) {
           Alert.alert('Balance Error', balanceData.error || 'Failed to fetch balance');
         }
       }
@@ -250,7 +250,7 @@ export default function HomeScreen({ navigation, route }: Props) {
       const txRes = await fetch(getApiUrl('/get-transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_id: selectedWallet.id }),
+        body: JSON.stringify({ mnemonic: selectedWallet.mnemonic }),
       });
       const txData = await txRes.json();
       
@@ -260,8 +260,8 @@ export default function HomeScreen({ navigation, route }: Props) {
         setTransactions(txData.data || []);
       } else {
         console.error('Transactions fetch failed:', txData.error || txData.message);
-        // Don't show error for wallet not found - it might be a new wallet
-        if (txData.error !== 'Wallet not found') {
+        // Don't show error for invalid mnemonic - it might be a corrupted wallet
+        if (!txData.error?.includes('Invalid mnemonic')) {
           Alert.alert('Transactions Error', txData.error || 'Failed to fetch transactions');
         }
       }
@@ -362,7 +362,7 @@ export default function HomeScreen({ navigation, route }: Props) {
       slideAnim.setValue(0);
       fadeAnim.setValue(1);
       setIsAnimating(false);
-      navigation.navigate('Send', { walletId: selectedWallet.id });
+      navigation.navigate('Send', { walletId: selectedWallet.id, walletMnemonic: selectedWallet.mnemonic });
     });
   };
 
@@ -440,8 +440,6 @@ export default function HomeScreen({ navigation, route }: Props) {
     }
   };
 
-
-
   // Add debug function to check wallet status
   const debugWalletStatus = async () => {
     console.log('=== WALLET DEBUG INFO ===');
@@ -454,10 +452,10 @@ export default function HomeScreen({ navigation, route }: Props) {
         const response = await fetch(getApiUrl('/get-balance'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ wallet_id: wallet.id }),
+          body: JSON.stringify({ mnemonic: wallet.mnemonic }),
         });
         const data = await response.json();
-        console.log(`Wallet ${wallet.name} (${wallet.id}):`, data.success ? 'EXISTS' : data.error);
+        console.log(`Wallet ${wallet.name} (${wallet.id}):`, data.success ? 'VALID MNEMONIC' : data.error);
       } catch (error) {
         console.log(`Wallet ${wallet.name} (${wallet.id}): ERROR -`, error);
       }
@@ -641,7 +639,7 @@ export default function HomeScreen({ navigation, route }: Props) {
         <Animated.View style={[styles.historyLinkContainer, { transform: [{ translateY: slideAnim }] }]}>
           <TouchableOpacity 
             style={styles.historyLink}
-            onPress={() => navigation.navigate('Transactions', { walletId: selectedWallet.id })}
+            onPress={() => navigation.navigate('Transactions', { walletId: selectedWallet.id, walletMnemonic: selectedWallet.mnemonic })}
           >
             <Text style={styles.historyLinkText}>View Transaction History</Text>
             <Text style={styles.historyLinkIcon}>→</Text>
