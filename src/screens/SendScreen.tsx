@@ -25,6 +25,7 @@ import {
   RADIUS
 } from '../theme';
 import QRCode from 'react-native-qrcode-svg';
+import { getApiUrl } from '../config';
 
 type SendScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Send'>;
 type SendScreenRouteProp = RouteProp<RootStackParamList, 'Send'>;
@@ -211,7 +212,7 @@ export default function SendScreen({ navigation, route }: Props) {
     }
 
     try {
-      const response = await fetch('http://192.168.1.10:8080/send-bitcoin', {
+      const response = await fetch(getApiUrl('/send-bitcoin'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

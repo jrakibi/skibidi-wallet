@@ -29,6 +29,7 @@ import {
   CARD_STYLES,
   GRADIENTS
 } from '../theme';
+import { getApiUrl } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -126,7 +127,7 @@ export default function CreateWalletScreen({ navigation }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const response = await fetch('http://192.168.1.10:8080/create-wallet', {
+      const response = await fetch(getApiUrl('/create-wallet'), {
         method: 'POST',
       });
       const data = await response.json();

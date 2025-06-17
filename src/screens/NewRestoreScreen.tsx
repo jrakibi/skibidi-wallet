@@ -26,6 +26,7 @@ import {
   TYPOGRAPHY,
   GRADIENTS
 } from '../theme';
+import { getApiUrl } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -130,7 +131,7 @@ export default function RestoreScreen({ navigation }: Props) {
 
     try {
       const mnemonic = seedWords.join(' ');
-      const response = await fetch('http://192.168.1.10:8080/restore-wallet', {
+      const response = await fetch(getApiUrl('/restore-wallet'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mnemonic }),

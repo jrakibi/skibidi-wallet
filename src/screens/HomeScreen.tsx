@@ -36,6 +36,7 @@ import {
   TYPOGRAPHY
 } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
+import { getApiUrl } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -226,7 +227,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     
     try {
       // Fetch balance
-      const balanceRes = await fetch('http://192.168.1.10:8080/get-balance', {
+      const balanceRes = await fetch(getApiUrl('/get-balance'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: selectedWallet.id }),
@@ -246,7 +247,7 @@ export default function HomeScreen({ navigation, route }: Props) {
       }
 
       // Fetch transactions
-      const txRes = await fetch('http://192.168.1.10:8080/get-transactions', {
+      const txRes = await fetch(getApiUrl('/get-transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet_id: selectedWallet.id }),
@@ -450,7 +451,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     // Test each wallet with the backend
     for (const wallet of wallets) {
       try {
-        const response = await fetch('http://192.168.1.10:8080/get-balance', {
+        const response = await fetch(getApiUrl('/get-balance'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet_id: wallet.id }),
@@ -680,7 +681,7 @@ export default function HomeScreen({ navigation, route }: Props) {
             <ScrollView style={styles.walletList} showsVerticalScrollIndicator={false}>
               {wallets.map((wallet, index) => (
                 <TouchableOpacity
-                  key={wallet.id}
+                  key={`${wallet.id}-${index}`}
                   style={[
                     styles.walletListItem,
                     selectedWallet?.id === wallet.id && styles.walletListItemSelected
