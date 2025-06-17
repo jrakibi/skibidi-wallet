@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,14 +7,14 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
   StatusBar,
   Animated,
+  Dimensions,
+  Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, WalletData } from '../../App';
 import { 
@@ -22,8 +22,12 @@ import {
   SPACING, 
   RADIUS, 
   SHADOWS, 
-  ANIMATIONS
+  ANIMATIONS,
+  TYPOGRAPHY,
+  GRADIENTS
 } from '../theme';
+
+const { width, height } = Dimensions.get('window');
 
 type RestoreScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Restore'>;
 
@@ -31,38 +35,95 @@ type Props = {
   navigation: RestoreScreenNavigationProp;
 };
 
+type Step = 'input' | 'restoring' | 'customize' | 'success';
+
+const WALLETS_STORAGE_KEY = '@skibidi_wallets';
+
+// Available wallet icons
+const WALLET_ICONS = [
+  require('../../assets/brainrot/brainrot1.png'),
+  require('../../assets/brainrot/brainrot2.png'),
+  require('../../assets/brainrot/brainrot3.png'),
+  require('../../assets/brainrot/brainrot4.png'),
+  require('../../assets/brainrot/brainrot5.png'),
+  require('../../assets/brainrot/brainrot6.png'),
+];
+
 export default function RestoreScreen({ navigation }: Props) {
+  const [currentStep, setCurrentStep] = useState<Step>('input');
   const [mnemonic, setMnemonic] = useState('');
-  const [restoring, setRestoring] = useState(false);
-  const [showNameModal, setShowNameModal] = useState(false);
   const [walletName, setWalletName] = useState('');
+  const [selectedIconIndex, setSelectedIconIndex] = useState(0);
   const [restoredWalletData, setRestoredWalletData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Animations
   const [fadeAnim] = useState(new Animated.Value(0));
+  const [slideAnim] = useState(new Animated.Value(50));
+  const [progressAnim] = useState(new Animated.Value(0));
 
-  const WALLETS_STORAGE_KEY = '@skibidi_wallets';
+  useEffect(() => {
+    // Entrance animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: ANIMATIONS.MEDIUM,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: ANIMATIONS.MEDIUM,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
-  React.useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: ANIMATIONS.MEDIUM,
-      useNativeDriver: true,
+    // Update progress animation
+    const stepProgress = {
+      input: 0.25,
+      restoring: 0.5,
+      customize: 0.75,
+      success: 1.0,
+    };
+
+    Animated.timing(progressAnim, {
+      toValue: stepProgress[currentStep],
+      duration: ANIMATIONS.FAST,
+      useNativeDriver: false,
     }).start();
-  }, []);
+  }, [currentStep]);
+
+  const wordCount = mnemonic.trim() ? mnemonic.trim().split(/\s+/).length : 0;
+
+  const handleNext = async () => {
+    switch (currentStep) {
+      case 'input':
+        if (wordCount !== 12) {
+          Alert.alert('Invalid Seed Phrase', 'Please enter exactly 12 words');
+          return;
+        }
+        setCurrentStep('restoring');
+        await restoreWallet();
+        break;
+      case 'restoring':
+        setCurrentStep('customize');
+        break;
+      case 'customize':
+        if (!walletName.trim()) {
+          Alert.alert('Name Required', 'Please enter a wallet name');
+          return;
+        }
+        await saveRestoredWallet();
+        setCurrentStep('success');
+        break;
+      case 'success':
+        navigation.navigate('MainTabs');
+        break;
+    }
+  };
 
   const restoreWallet = async () => {
-    if (!mnemonic.trim()) {
-      Alert.alert('Required', 'Enter your seed phrase');
-      return;
-    }
-
-    const words = mnemonic.trim().split(/\s+/);
-    if (words.length !== 12) {
-      Alert.alert('Invalid', 'Must be 12 words');
-      return;
-    }
-
-    setRestoring(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       const response = await fetch('http://192.168.1.10:8080/restore-wallet', {
@@ -75,26 +136,38 @@ export default function RestoreScreen({ navigation }: Props) {
 
       if (result.success) {
         setRestoredWalletData(result.data);
-        setShowNameModal(true);
+        setTimeout(() => {
+          setCurrentStep('customize');
+        }, 1500);
       } else {
-        Alert.alert('Failed', 'Invalid seed phrase');
+        Alert.alert('Invalid Seed Phrase', 'Please check your seed phrase and try again');
+        setCurrentStep('input');
       }
     } catch (error) {
-      Alert.alert('Error', 'Connection failed');
+      Alert.alert('Connection Error', 'Please check your connection and try again');
+      setCurrentStep('input');
     } finally {
-      setRestoring(false);
+      setLoading(false);
     }
   };
 
   const saveRestoredWallet = async () => {
-    if (!walletName.trim()) {
-      Alert.alert('Required', 'Enter wallet name');
-      return;
-    }
+    if (!restoredWalletData) return;
 
     try {
       const storedWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
       const existingWallets: WalletData[] = storedWallets ? JSON.parse(storedWallets) : [];
+
+      // Check if wallet with same ID already exists
+      const existingWallet = existingWallets.find(w => w.id === restoredWalletData.wallet_id);
+      if (existingWallet) {
+        Alert.alert(
+          'Wallet Already Exists',
+          `A wallet with this seed phrase already exists: "${existingWallet.name}". Each seed phrase can only be used once.`,
+          [{ text: 'OK', onPress: () => setCurrentStep('input') }]
+        );
+        return;
+      }
 
       const newWallet: WalletData = {
         id: restoredWalletData.wallet_id,
@@ -103,142 +176,241 @@ export default function RestoreScreen({ navigation }: Props) {
         mnemonic: restoredWalletData.mnemonic,
         balance: 0,
         createdAt: new Date().toISOString(),
+        iconIndex: selectedIconIndex,
       };
 
       const updatedWallets = [...existingWallets, newWallet];
       await AsyncStorage.setItem(WALLETS_STORAGE_KEY, JSON.stringify(updatedWallets));
 
-      setShowNameModal(false);
-      setWalletName('');
-      setMnemonic('');
-      setRestoredWalletData(null);
-
-      Alert.alert(
-        'Restored',
-        `Wallet "${walletName.trim()}" restored successfully`,
-        [
-          {
-            text: 'Continue',
-            onPress: () => navigation.navigate('MainTabs'),
-          },
-        ]
-      );
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       Alert.alert('Error', 'Could not save wallet');
     }
   };
 
-  const wordCount = mnemonic.trim() ? mnemonic.trim().split(/\s+/).length : 0;
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 'input':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.headerSection}>
+              <Image 
+                source={require('../../assets/icons/locker.png')} 
+                style={styles.headerIcon}
+              />
+              <Text style={styles.stepTitle}>Restore Your Wallet</Text>
+              <Text style={styles.stepDescription}>
+                Enter your 12-word recovery phrase to restore your Bitcoin wallet
+              </Text>
+            </View>
+            
+            <View style={styles.inputSection}>
+              <Text style={styles.inputLabel}>Recovery Phrase</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Enter your 12 words separated by spaces"
+                placeholderTextColor={COLORS.TEXT_TERTIARY}
+                value={mnemonic}
+                onChangeText={setMnemonic}
+                multiline
+                autoCapitalize="none"
+                autoCorrect={false}
+                spellCheck={false}
+                textAlignVertical="top"
+              />
+              <View style={styles.wordCountContainer}>
+                <Text style={[
+                  styles.wordCount,
+                  wordCount === 12 ? styles.wordCountValid : styles.wordCountInvalid
+                ]}>
+                  {wordCount}/12 words
+                </Text>
+              </View>
+            </View>
+          </View>
+        );
+
+      case 'restoring':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.loadingContainer}>
+              <Image 
+                source={require('../../assets/icons/locker.png')} 
+                style={styles.loadingIcon}
+              />
+              <Text style={styles.stepTitle}>Restoring Wallet</Text>
+              <Text style={styles.stepDescription}>
+                Validating your recovery phrase and restoring your wallet...
+              </Text>
+            </View>
+          </View>
+        );
+
+      case 'customize':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.headerSection}>
+              <Text style={styles.stepTitle}>Customize Your Wallet</Text>
+              <Text style={styles.stepDescription}>
+                Choose a name and icon for your restored wallet
+              </Text>
+            </View>
+
+            {/* Icon Selection */}
+            <View style={styles.iconSelectionContainer}>
+              <Text style={styles.sectionLabel}>Choose Icon</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.iconScrollView}
+                contentContainerStyle={styles.iconScrollContent}
+              >
+                {WALLET_ICONS.map((icon, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.iconOption,
+                      selectedIconIndex === index && styles.iconOptionSelected
+                    ]}
+                    onPress={() => {
+                      setSelectedIconIndex(index);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <Image source={icon} style={styles.iconOptionImage} />
+                    {selectedIconIndex === index && (
+                      <View style={styles.iconSelectedOverlay}>
+                        <Text style={styles.iconSelectedCheck}>✓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Name Input */}
+            <View style={styles.inputSection}>
+              <Text style={styles.sectionLabel}>Wallet Name</Text>
+              <TextInput
+                style={styles.nameInput}
+                placeholder="My Restored Wallet"
+                placeholderTextColor={COLORS.TEXT_TERTIARY}
+                value={walletName}
+                onChangeText={setWalletName}
+                maxLength={20}
+                autoFocus
+              />
+            </View>
+          </View>
+        );
+
+      case 'success':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.successContainer}>
+              <Image source={WALLET_ICONS[selectedIconIndex]} style={styles.successIcon} />
+              <Text style={styles.stepTitle}>Wallet Restored!</Text>
+              <Text style={styles.stepDescription}>
+                Your wallet "{walletName}" has been successfully restored
+              </Text>
+              
+              <View style={styles.walletInfoCard}>
+                <Text style={styles.walletInfoLabel}>Address</Text>
+                <Text style={styles.walletInfoValue} numberOfLines={1} ellipsizeMode="middle">
+                  {restoredWalletData?.address}
+                </Text>
+              </View>
+            </View>
+          </View>
+        );
+    }
+  };
+
+  const getButtonText = () => {
+    switch (currentStep) {
+      case 'input': return 'Restore Wallet';
+      case 'restoring': return 'Restoring...';
+      case 'customize': return 'Save Wallet';
+      case 'success': return 'Go to Wallet';
+      default: return 'Next';
+    }
+  };
+
+  const isButtonDisabled = () => {
+    switch (currentStep) {
+      case 'input': return wordCount !== 12;
+      case 'restoring': return loading;
+      case 'customize': return !walletName.trim();
+      default: return false;
+    }
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton} 
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Restore Wallet</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          
+          <Text style={styles.headerTitle}>Restore Wallet</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-      <KeyboardAvoidingView 
-        style={styles.flex} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <ScrollView 
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
-          <Animated.View style={{ opacity: fadeAnim }}>
-            {/* Seed Phrase Input */}
-            <View style={styles.inputSection}>
-              <Text style={styles.inputLabel}>Seed Phrase</Text>
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter your 12 words separated by spaces"
-                  placeholderTextColor={COLORS.TEXT_TERTIARY}
-                  value={mnemonic}
-                  onChangeText={setMnemonic}
-                  multiline
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  spellCheck={false}
-                />
-                <TouchableOpacity
-                  style={styles.scanButton}
-                  onPress={() => navigation.navigate('QRScanner', {
-                    onScan: (data: string) => setMnemonic(data)
-                  })}
-                >
-                  <Text style={styles.scanButtonText}>📷</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.wordCount}>
-                {wordCount}/12 words
-              </Text>
-            </View>
-
-            {/* Restore Button */}
-            <TouchableOpacity
+        {/* Progress Bar */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressTrack}>
+            <Animated.View 
               style={[
-                styles.restoreButton,
-                (wordCount === 12 && !restoring) && styles.restoreButtonActive
+                styles.progressFill,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
               ]}
-              onPress={restoreWallet}
-              disabled={wordCount !== 12 || restoring}
-            >
-              <Text style={styles.restoreButtonText}>
-                {restoring ? 'Restoring...' : 'Restore Wallet'}
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Name Modal */}
-      <Modal
-        visible={showNameModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowNameModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Name Your Wallet</Text>
-            
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Wallet name"
-              placeholderTextColor={COLORS.TEXT_TERTIARY}
-              value={walletName}
-              onChangeText={setWalletName}
-              autoFocus
             />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={() => setShowNameModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={saveRestoredWallet}
-              >
-                <Text style={styles.saveButtonText}>Save</Text>
-              </TouchableOpacity>
-            </View>
           </View>
         </View>
-      </Modal>
+
+        {/* Step Content */}
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {renderStepContent()}
+        </ScrollView>
+
+        {/* Action Button */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.actionButton,
+              isButtonDisabled() && styles.actionButtonDisabled,
+            ]}
+            onPress={handleNext}
+            disabled={isButtonDisabled()}
+          >
+            <LinearGradient
+              colors={isButtonDisabled() ? [COLORS.SURFACE, COLORS.SURFACE] : GRADIENTS.PRIMARY}
+              style={styles.buttonGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              <Text style={[
+                styles.actionButtonText,
+                isButtonDisabled() && styles.actionButtonTextDisabled,
+              ]}>
+                {getButtonText()}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
     </View>
   );
 }
@@ -249,11 +421,15 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.BACKGROUND,
   },
   
+  content: {
+    flex: 1,
+    paddingHorizontal: SPACING.LG,
+  },
+  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: SPACING.LG,
     paddingTop: 60,
     paddingBottom: SPACING.LG,
   },
@@ -273,8 +449,8 @@ const styles = StyleSheet.create({
   },
   
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.TITLE,
+    fontWeight: TYPOGRAPHY.BOLD,
     color: COLORS.TEXT_PRIMARY,
   },
   
@@ -282,154 +458,248 @@ const styles = StyleSheet.create({
     width: 40,
   },
   
-  flex: {
+  progressContainer: {
+    height: 4,
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.SM,
+    marginBottom: SPACING.LG,
+  },
+  
+  progressTrack: {
+    height: '100%',
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.SM,
+  },
+  
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: RADIUS.SM,
+  },
+  
+  scrollView: {
     flex: 1,
   },
   
-  content: {
-    paddingHorizontal: SPACING.LG,
-    paddingBottom: SPACING.XL,
-    gap: SPACING.XL,
+  stepContainer: {
+    flex: 1,
+    paddingVertical: SPACING.MD,
+  },
+  
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: SPACING.XXL,
+  },
+  
+  headerIcon: {
+    width: 64,
+    height: 64,
+    marginBottom: SPACING.LG,
+  },
+  
+  stepTitle: {
+    fontSize: TYPOGRAPHY.HEADING,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+    marginBottom: SPACING.SM,
+  },
+  
+  stepDescription: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   
   inputSection: {
-    gap: SPACING.SM,
+    marginBottom: SPACING.XL,
   },
   
   inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
-  },
-  
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: SPACING.MD,
   },
   
   textInput: {
-    flex: 1,
     backgroundColor: COLORS.SURFACE,
     borderRadius: RADIUS.LG,
     padding: SPACING.LG,
-    fontSize: 16,
+    fontSize: TYPOGRAPHY.BODY,
     color: COLORS.TEXT_PRIMARY,
     minHeight: 120,
-    textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: COLORS.BORDER_LIGHT,
-    marginRight: SPACING.SM,
-  },
-  
-  scanButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.SURFACE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  
-  scanButtonText: {
-    fontSize: 18,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  wordCount: {
-    fontSize: 12,
-    color: COLORS.TEXT_TERTIARY,
-    textAlign: 'right',
-  },
-  
-  restoreButton: {
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.5,
-  },
-  
-  restoreButtonActive: {
-    backgroundColor: COLORS.PRIMARY,
-    opacity: 1,
     ...SHADOWS.SUBTLE,
   },
   
-  restoreButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
+  wordCountContainer: {
+    alignItems: 'flex-end',
+    marginTop: SPACING.SM,
   },
   
-  modalOverlay: {
+  wordCount: {
+    fontSize: TYPOGRAPHY.SMALL,
+    fontWeight: TYPOGRAPHY.MEDIUM,
+  },
+  
+  wordCountValid: {
+    color: COLORS.SUCCESS,
+  },
+  
+  wordCountInvalid: {
+    color: COLORS.TEXT_TERTIARY,
+  },
+  
+  loadingContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: SPACING.LG,
   },
   
-  modalContent: {
+  loadingIcon: {
+    width: 64,
+    height: 64,
+    marginBottom: SPACING.LG,
+  },
+  
+  iconSelectionContainer: {
+    marginBottom: SPACING.XL,
+  },
+  
+  sectionLabel: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.MD,
+  },
+  
+  iconScrollView: {
+    height: 80,
+  },
+  
+  iconScrollContent: {
+    paddingHorizontal: SPACING.SM,
+    gap: SPACING.SM,
+  },
+  
+  iconOption: {
+    width: 64,
+    height: 64,
+    borderRadius: RADIUS.MD,
+    backgroundColor: COLORS.SURFACE,
+    marginRight: SPACING.SM,
+    position: 'relative',
+    ...SHADOWS.SUBTLE,
+  },
+  
+  iconOptionSelected: {
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    ...SHADOWS.GLOW_GRAY,
+  },
+  
+  iconOptionImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: RADIUS.MD,
+  },
+  
+  iconSelectedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: RADIUS.MD,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  iconSelectedCheck: {
+    fontSize: 24,
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: 'bold',
+  },
+  
+  nameInput: {
     backgroundColor: COLORS.SURFACE,
     borderRadius: RADIUS.LG,
-    padding: SPACING.XL,
+    padding: SPACING.LG,
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+    ...SHADOWS.SUBTLE,
+  },
+  
+  successContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  successIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: RADIUS.LG,
+    marginBottom: SPACING.LG,
+  },
+  
+  walletInfoCard: {
     width: '100%',
-    maxWidth: 300,
-    gap: SPACING.LG,
-  },
-  
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-    textAlign: 'center',
-  },
-  
-  modalInput: {
-    backgroundColor: COLORS.BACKGROUND,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.MD,
-    fontSize: 16,
-    color: COLORS.TEXT_PRIMARY,
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    padding: SPACING.LG,
+    marginTop: SPACING.XL,
     borderWidth: 1,
     borderColor: COLORS.BORDER_LIGHT,
+    ...SHADOWS.SUBTLE,
   },
   
-  modalButtons: {
-    flexDirection: 'row',
-    gap: SPACING.MD,
+  walletInfoLabel: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_SECONDARY,
+    marginBottom: SPACING.XS,
   },
   
-  cancelButton: {
-    flex: 1,
-    backgroundColor: COLORS.BACKGROUND,
-    borderRadius: RADIUS.MD,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT,
-  },
-  
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
+  walletInfoValue: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontFamily: 'Courier',
     color: COLORS.TEXT_PRIMARY,
   },
   
-  saveButton: {
-    flex: 1,
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: RADIUS.MD,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+  buttonContainer: {
+    paddingVertical: SPACING.LG,
   },
   
-  saveButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
+  actionButton: {
+    borderRadius: RADIUS.LG,
+    overflow: 'hidden',
+    ...SHADOWS.SUBTLE,
+  },
+  
+  actionButtonDisabled: {
+    opacity: 0.5,
+  },
+  
+  buttonGradient: {
+    paddingVertical: SPACING.LG,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
+  },
+  
+  actionButtonText: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
+  },
+  
+  actionButtonTextDisabled: {
+    color: COLORS.TEXT_TERTIARY,
   },
 }); 

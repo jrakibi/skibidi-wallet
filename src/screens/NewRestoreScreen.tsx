@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
-  TextInput,
+  ScrollView,
   Alert,
   StatusBar,
   Animated,
   Dimensions,
-  ScrollView,
-  Modal,
   Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,27 +24,22 @@ import {
   SHADOWS, 
   ANIMATIONS,
   TYPOGRAPHY,
-  BUTTON_STYLES,
-  CARD_STYLES,
   GRADIENTS
 } from '../theme';
 
 const { width, height } = Dimensions.get('window');
 
-type CreateWalletScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'CreateWallet'
->;
+type RestoreScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Restore'>;
 
 type Props = {
-  navigation: CreateWalletScreenNavigationProp;
+  navigation: RestoreScreenNavigationProp;
 };
 
-type Step = 'name' | 'generating' | 'backup' | 'complete';
+type Step = 'intro' | 'input' | 'validating' | 'customize' | 'success';
 
 const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
-// Available wallet icons
+// Available wallet icons (same as CreateWalletScreen for consistency)
 const WALLET_ICONS = [
   require('../../assets/brainrot/brainrot1.png'),
   require('../../assets/brainrot/brainrot2.png'),
@@ -55,14 +49,14 @@ const WALLET_ICONS = [
   require('../../assets/brainrot/brainrot6.png'),
 ];
 
-export default function CreateWalletScreen({ navigation }: Props) {
-  const [currentStep, setCurrentStep] = useState<Step>('name');
+export default function RestoreScreen({ navigation }: Props) {
+  const [currentStep, setCurrentStep] = useState<Step>('intro');
+  const [seedWords, setSeedWords] = useState<string[]>(Array(12).fill(''));
+  const [activeWordIndex, setActiveWordIndex] = useState(0);
   const [walletName, setWalletName] = useState('');
   const [selectedIconIndex, setSelectedIconIndex] = useState(0);
-  const [generatedWallet, setGeneratedWallet] = useState<any>(null);
-  const [seedWords, setSeedWords] = useState<string[]>([]);
+  const [restoredWalletData, setRestoredWalletData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [showSeedModal, setShowSeedModal] = useState(false);
   
   // Animations
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -86,10 +80,11 @@ export default function CreateWalletScreen({ navigation }: Props) {
 
     // Update progress animation based on step
     const stepProgress = {
-      name: 0.25,
-      generating: 0.5,
-      backup: 0.75,
-      complete: 1.0,
+      intro: 0.2,
+      input: 0.4,
+      validating: 0.6,
+      customize: 0.8,
+      success: 1.0,
     };
 
     Animated.timing(progressAnim, {
@@ -101,105 +96,204 @@ export default function CreateWalletScreen({ navigation }: Props) {
 
   const handleNext = async () => {
     switch (currentStep) {
-      case 'name':
+      case 'intro':
+        setCurrentStep('input');
+        break;
+      case 'input':
+        if (seedWords.every(word => word.trim())) {
+          setCurrentStep('validating');
+          await validateSeedPhrase();
+        } else {
+          Alert.alert('Incomplete', 'Please fill in all 12 seed words');
+        }
+        break;
+      case 'validating':
+        setCurrentStep('customize');
+        break;
+      case 'customize':
         if (!walletName.trim()) {
           Alert.alert('Name Required', 'Please enter a wallet name');
           return;
         }
-        setCurrentStep('generating');
-        await generateWallet();
+        await saveRestoredWallet();
+        setCurrentStep('success');
         break;
-      case 'generating':
-        setCurrentStep('backup');
-        break;
-      case 'backup':
-        setCurrentStep('complete');
-        break;
-      case 'complete':
-        await saveWallet();
+      case 'success':
+        navigation.navigate('MainTabs');
         break;
     }
   };
 
-  const generateWallet = async () => {
+  const validateSeedPhrase = async () => {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      const response = await fetch('http://192.168.1.10:8080/create-wallet', {
+      const mnemonic = seedWords.join(' ');
+      const response = await fetch('http://192.168.1.10:8080/restore-wallet', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mnemonic }),
       });
-      const data = await response.json();
 
-      if (data.success) {
-        setGeneratedWallet(data.data);
-        setSeedWords(data.data.mnemonic.split(' '));
+      const result = await response.json();
+
+      if (result.success) {
+        setRestoredWalletData(result.data);
         setTimeout(() => {
-          setCurrentStep('backup');
+          setCurrentStep('customize');
         }, 1500);
       } else {
-        Alert.alert('Error', 'Failed to generate wallet');
-        setCurrentStep('name');
+        Alert.alert('Invalid Seed Phrase', 'Please check your words and try again');
+        setCurrentStep('input');
       }
     } catch (error) {
-      Alert.alert('Error', 'Network error. Please try again.');
-      setCurrentStep('name');
+      Alert.alert('Connection Error', 'Please check your connection and try again');
+      setCurrentStep('input');
     } finally {
       setLoading(false);
     }
   };
 
-  const saveWallet = async () => {
-    if (!generatedWallet) return;
+  const saveRestoredWallet = async () => {
+    if (!restoredWalletData) return;
 
     try {
-      const existingWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
-      const wallets = existingWallets ? JSON.parse(existingWallets) : [];
+      const storedWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      const existingWallets: WalletData[] = storedWallets ? JSON.parse(storedWallets) : [];
 
       // Check if wallet with same ID already exists
-      const existingWallet = wallets.find((w: WalletData) => w.id === generatedWallet.wallet_id);
+      const existingWallet = existingWallets.find(w => w.id === restoredWalletData.wallet_id);
       if (existingWallet) {
         Alert.alert(
           'Wallet Already Exists',
           `A wallet with this seed phrase already exists: "${existingWallet.name}". Each seed phrase can only be used once.`,
-          [{ text: 'OK', onPress: () => setCurrentStep('name') }]
+          [{ text: 'OK', onPress: () => setCurrentStep('input') }]
         );
         return;
       }
 
       const newWallet: WalletData = {
-        id: generatedWallet.wallet_id,
+        id: restoredWalletData.wallet_id,
         name: walletName.trim(),
-        address: generatedWallet.address,
-        mnemonic: generatedWallet.mnemonic,
+        address: restoredWalletData.address,
+        mnemonic: restoredWalletData.mnemonic,
         balance: 0,
         createdAt: new Date().toISOString(),
-        iconIndex: selectedIconIndex, // Add icon index to wallet data
+        iconIndex: selectedIconIndex,
       };
 
-      wallets.push(newWallet);
-      
-      await AsyncStorage.setItem(WALLETS_STORAGE_KEY, JSON.stringify(wallets));
-      
+      const updatedWallets = [...existingWallets, newWallet];
+      await AsyncStorage.setItem(WALLETS_STORAGE_KEY, JSON.stringify(updatedWallets));
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
-      setTimeout(() => {
-        // Navigate to MainTabs to ensure navigation bar is shown
-        navigation.navigate('MainTabs');
-      }, 2000);
     } catch (error) {
-      Alert.alert('Error', 'Failed to save wallet');
+      Alert.alert('Error', 'Could not save wallet');
+    }
+  };
+
+  const updateSeedWord = (index: number, word: string) => {
+    const newSeedWords = [...seedWords];
+    newSeedWords[index] = word.toLowerCase().trim();
+    setSeedWords(newSeedWords);
+    
+    // Auto-focus next input if current word is complete
+    if (word.trim() && index < 11) {
+      setActiveWordIndex(index + 1);
     }
   };
 
   const renderStepContent = () => {
     switch (currentStep) {
-      case 'name':
+      case 'intro':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.introContainer}>
+              <Image 
+                source={require('../../assets/icons/locker.png')} 
+                style={styles.introIcon}
+              />
+              <Text style={styles.stepTitle}>Restore Your Wallet</Text>
+              <Text style={styles.stepDescription}>
+                Enter your 12-word recovery phrase to restore your Bitcoin wallet
+              </Text>
+              
+              <View style={styles.featureList}>
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>🔒</Text>
+                  <Text style={styles.featureText}>Secure restoration process</Text>
+                </View>
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>⚡</Text>
+                  <Text style={styles.featureText}>Instant wallet access</Text>
+                </View>
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>💎</Text>
+                  <Text style={styles.featureText}>Full balance recovery</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        );
+
+      case 'input':
+        return (
+          <View style={styles.stepContainer}>
+            <Text style={styles.stepTitle}>Enter Seed Phrase</Text>
+            <Text style={styles.stepDescription}>
+              Type each word of your 12-word recovery phrase
+            </Text>
+            
+            <View style={styles.seedInputContainer}>
+              {seedWords.map((word, index) => (
+                <View key={index} style={styles.seedWordInputContainer}>
+                  <Text style={styles.seedWordNumber}>{index + 1}</Text>
+                  <TextInput
+                    style={[
+                      styles.seedWordInput,
+                      activeWordIndex === index && styles.seedWordInputActive
+                    ]}
+                    value={word}
+                    onChangeText={(text) => updateSeedWord(index, text)}
+                    onFocus={() => setActiveWordIndex(index)}
+                    placeholder="word"
+                    placeholderTextColor={COLORS.TEXT_TERTIARY}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    spellCheck={false}
+                  />
+                </View>
+              ))}
+            </View>
+            
+            <Text style={styles.progressText}>
+              {seedWords.filter(w => w.trim()).length}/12 words entered
+            </Text>
+          </View>
+        );
+
+      case 'validating':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.loadingContainer}>
+              <Image 
+                source={require('../../assets/icons/locker.png')} 
+                style={styles.validatingIcon}
+              />
+              <Text style={styles.stepTitle}>Validating Seed Phrase</Text>
+              <Text style={styles.stepDescription}>
+                Checking your recovery phrase and restoring wallet...
+              </Text>
+            </View>
+          </View>
+        );
+
+      case 'customize':
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>Customize Your Wallet</Text>
             <Text style={styles.stepDescription}>
-              Choose a name and icon for your wallet
+              Choose a name and icon for your restored wallet
             </Text>
             
             {/* Icon Selection */}
@@ -239,7 +333,7 @@ export default function CreateWalletScreen({ navigation }: Props) {
               <Text style={styles.inputLabel}>Wallet Name</Text>
               <TextInput
                 style={styles.textInput}
-                placeholder="My Skibidi Wallet"
+                placeholder="My Restored Wallet"
                 placeholderTextColor={COLORS.TEXT_TERTIARY}
                 value={walletName}
                 onChangeText={setWalletName}
@@ -250,68 +344,20 @@ export default function CreateWalletScreen({ navigation }: Props) {
           </View>
         );
 
-      case 'generating':
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.loadingContainer}>
-              <Image source={WALLET_ICONS[selectedIconIndex]} style={styles.generatingIcon} />
-              <Text style={styles.stepTitle}>Generating Wallet</Text>
-              <Text style={styles.stepDescription}>
-                Creating your secure Bitcoin wallet...
-              </Text>
-            </View>
-          </View>
-        );
-
-      case 'backup':
-        return (
-          <View style={styles.stepContainer}>
-            <View style={styles.warningContainer}>
-              <Image 
-                source={require('../../assets/icons/locker.png')} 
-                style={styles.warningIcon}
-              />
-              <Text style={styles.stepTitle}>Backup Your Seed</Text>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.seedContainer}
-              onPress={() => setShowSeedModal(true)}
-            >
-              <View style={styles.seedGrid}>
-                {seedWords.map((word, index) => (
-                  <View key={index} style={styles.seedWordContainer}>
-                    <Text style={styles.seedWordNumber}>{index + 1}</Text>
-                    <Text style={styles.seedWord}>{word}</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={styles.tapToView}>Tap to view seed phrase clearly</Text>
-            </TouchableOpacity>
-
-            <View style={styles.backupTips}>
-              <Text style={styles.backupTipsTitle}>💡 Backup Tips:</Text>
-              <Text style={styles.backupTip}>• Write on paper, never store digitally</Text>
-              <Text style={styles.backupTip}>• Keep multiple copies in safe places</Text>
-              <Text style={styles.backupTip}>• Never share with anyone</Text>
-            </View>
-          </View>
-        );
-
-      case 'complete':
+      case 'success':
         return (
           <View style={styles.stepContainer}>
             <View style={styles.successContainer}>
               <Image source={WALLET_ICONS[selectedIconIndex]} style={styles.successIcon} />
-              <Text style={styles.stepTitle}>Wallet Created!</Text>
+              <Text style={styles.stepTitle}>Wallet Restored!</Text>
               <Text style={styles.stepDescription}>
-                Your wallet "{walletName}" is ready to use
+                Your wallet "{walletName}" has been successfully restored
               </Text>
               
               <View style={styles.walletInfoCard}>
                 <Text style={styles.walletInfoLabel}>Address</Text>
                 <Text style={styles.walletInfoValue} numberOfLines={1} ellipsizeMode="middle">
-                  {generatedWallet?.address}
+                  {restoredWalletData?.address}
                 </Text>
               </View>
             </View>
@@ -322,18 +368,20 @@ export default function CreateWalletScreen({ navigation }: Props) {
 
   const getButtonText = () => {
     switch (currentStep) {
-      case 'name': return 'Create Wallet';
-      case 'generating': return 'Generating...';
-      case 'backup': return 'I\'ve Saved It Safely';
-      case 'complete': return 'Start Using Wallet';
+      case 'intro': return 'Start Restoration';
+      case 'input': return 'Validate Seed Phrase';
+      case 'validating': return 'Validating...';
+      case 'customize': return 'Restore Wallet';
+      case 'success': return 'Go to Wallet';
       default: return 'Next';
     }
   };
 
   const isButtonDisabled = () => {
     switch (currentStep) {
-      case 'name': return !walletName.trim();
-      case 'generating': return loading;
+      case 'input': return !seedWords.every(word => word.trim());
+      case 'validating': return loading;
+      case 'customize': return !walletName.trim();
       default: return false;
     }
   };
@@ -352,7 +400,7 @@ export default function CreateWalletScreen({ navigation }: Props) {
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
           
-          <Text style={styles.headerTitle}>Create Wallet</Text>
+          <Text style={styles.headerTitle}>Restore Wallet</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -404,41 +452,6 @@ export default function CreateWalletScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
       </Animated.View>
-
-      {/* Seed Phrase Modal */}
-      <Modal
-        visible={showSeedModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowSeedModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Your Seed Phrase</Text>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={() => setShowSeedModal(false)}
-              >
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.modalSeedGrid}>
-              {seedWords.map((word, index) => (
-                <View key={index} style={styles.modalSeedWord}>
-                  <Text style={styles.modalSeedNumber}>{index + 1}</Text>
-                  <Text style={styles.modalSeedText}>{word}</Text>
-                </View>
-              ))}
-            </View>
-            
-            <Text style={styles.modalWarning}>
-              ⚠️ Never share this phrase with anyone. Store it safely offline.
-            </Text>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -458,21 +471,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: SPACING.XL,
+    paddingTop: 60,
     paddingBottom: SPACING.LG,
   },
   
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: RADIUS.MD,
+    borderRadius: 20,
     backgroundColor: COLORS.SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   
   backButtonText: {
-    fontSize: 20,
+    fontSize: 18,
     color: COLORS.TEXT_PRIMARY,
   },
   
@@ -487,20 +500,22 @@ const styles = StyleSheet.create({
   },
   
   progressContainer: {
-    marginBottom: SPACING.XL,
+    height: 4,
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.SM,
+    marginBottom: SPACING.LG,
   },
   
   progressTrack: {
-    height: 4,
+    height: '100%',
     backgroundColor: COLORS.SURFACE,
-    borderRadius: 2,
-    overflow: 'hidden',
+    borderRadius: RADIUS.SM,
   },
   
   progressFill: {
     height: '100%',
     backgroundColor: COLORS.PRIMARY,
-    borderRadius: 2,
+    borderRadius: RADIUS.SM,
   },
   
   scrollView: {
@@ -509,8 +524,19 @@ const styles = StyleSheet.create({
   
   stepContainer: {
     flex: 1,
+    paddingVertical: SPACING.LG,
+  },
+  
+  introContainer: {
+    flex: 1,
     alignItems: 'center',
-    paddingVertical: SPACING.XL,
+    justifyContent: 'center',
+  },
+  
+  introIcon: {
+    width: 80,
+    height: 80,
+    marginBottom: SPACING.LG,
   },
   
   stepTitle: {
@@ -522,85 +548,150 @@ const styles = StyleSheet.create({
   },
   
   stepDescription: {
-    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontSize: TYPOGRAPHY.BODY,
     color: COLORS.TEXT_SECONDARY,
     textAlign: 'center',
     marginBottom: SPACING.XL,
-    lineHeight: 24,
   },
-
-  // Icon Selection Styles
+  
+  featureList: {
+    alignItems: 'center',
+    gap: SPACING.LG,
+  },
+  
+  featureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.MD,
+  },
+  
+  featureIcon: {
+    fontSize: 24,
+  },
+  
+  featureText: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+  },
+  
+  seedInputContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.LG,
+  },
+  
+  seedWordInputContainer: {
+    width: '30%',
+    marginBottom: SPACING.MD,
+  },
+  
+  seedWordNumber: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_TERTIARY,
+    marginBottom: SPACING.XS,
+    textAlign: 'center',
+  },
+  
+  seedWordInput: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.SM,
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+  },
+  
+  seedWordInputActive: {
+    borderColor: COLORS.PRIMARY,
+    ...SHADOWS.GLOW_GRAY,
+  },
+  
+  progressText: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+  },
+  
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  validatingIcon: {
+    width: 80,
+    height: 80,
+    marginBottom: SPACING.LG,
+  },
+  
   iconSelectionContainer: {
-    width: '100%',
     marginBottom: SPACING.XL,
   },
-
+  
   iconSelectionLabel: {
-    fontSize: TYPOGRAPHY.BODY,
+    fontSize: TYPOGRAPHY.BODY_LARGE,
     fontWeight: TYPOGRAPHY.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
     marginBottom: SPACING.MD,
-    textAlign: 'center',
   },
-
+  
   iconScrollView: {
-    maxHeight: 100,
+    height: 80,
   },
-
+  
   iconScrollContent: {
     paddingHorizontal: SPACING.SM,
-    alignItems: 'center',
+    gap: SPACING.SM,
   },
-
+  
   iconOption: {
-    width: 70,
-    height: 70,
-    borderRadius: RADIUS.LG,
-    marginHorizontal: SPACING.XS,
+    width: 64,
+    height: 64,
+    borderRadius: RADIUS.MD,
     backgroundColor: COLORS.SURFACE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.BORDER_LIGHT,
+    marginRight: SPACING.SM,
     position: 'relative',
   },
-
+  
   iconOptionSelected: {
+    borderWidth: 2,
     borderColor: COLORS.PRIMARY,
-    backgroundColor: COLORS.PRIMARY + '20',
+    ...SHADOWS.GLOW_GRAY,
   },
-
+  
   iconOptionImage: {
-    width: 50,
-    height: 50,
+    width: '100%',
+    height: '100%',
     borderRadius: RADIUS.MD,
   },
-
+  
   iconSelectedOverlay: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: COLORS.PRIMARY,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: RADIUS.MD,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
+  
   iconSelectedCheck: {
-    fontSize: 12,
-    color: COLORS.TEXT_INVERSE,
-    fontWeight: TYPOGRAPHY.BOLD,
+    fontSize: 24,
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: 'bold',
   },
   
   inputContainer: {
-    width: '100%',
-    marginBottom: SPACING.XL,
+    marginBottom: SPACING.LG,
   },
-
+  
   inputLabel: {
-    fontSize: TYPOGRAPHY.BODY,
+    fontSize: TYPOGRAPHY.BODY_LARGE,
     fontWeight: TYPOGRAPHY.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
     marginBottom: SPACING.SM,
@@ -610,116 +701,18 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.SURFACE,
     borderRadius: RADIUS.LG,
     padding: SPACING.LG,
-    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontSize: TYPOGRAPHY.BODY,
     color: COLORS.TEXT_PRIMARY,
-    textAlign: 'center',
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: COLORS.BORDER_LIGHT,
   },
   
-  loadingContainer: {
-    alignItems: 'center',
-  },
-
-  generatingIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: RADIUS.LG,
-    marginBottom: SPACING.LG,
-  },
-  
-  warningContainer: {
-    alignItems: 'center',
-    marginBottom: SPACING.XL,
-  },
-  
-  warningIcon: {
-    width: 50,
-    height: 50,
-    marginBottom: SPACING.MD,
-  },
-  
-  warningText: {
-    fontSize: TYPOGRAPHY.BODY,
-    color: COLORS.WARNING,
-    textAlign: 'center',
-    backgroundColor: COLORS.SURFACE,
-    padding: SPACING.LG,
-    borderRadius: RADIUS.MD,
-    marginTop: SPACING.MD,
-  },
-  
-  seedContainer: {
-    width: '100%',
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: SPACING.LG,
-    borderWidth: 2,
-    borderColor: COLORS.BORDER_MEDIUM,
-    marginBottom: SPACING.LG,
-  },
-  
-  seedGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  
-  seedWordContainer: {
-    width: '30%',
-    backgroundColor: COLORS.SURFACE_ELEVATED,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.MD,
-    marginBottom: SPACING.SM,
-    alignItems: 'center',
-  },
-  
-  seedWordNumber: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_TERTIARY,
-    marginBottom: SPACING.XS,
-  },
-  
-  seedWord: {
-    fontSize: TYPOGRAPHY.BODY,
-    fontWeight: TYPOGRAPHY.MEDIUM,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  tapToView: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_SECONDARY,
-    textAlign: 'center',
-    marginTop: SPACING.MD,
-  },
-
-  backupTips: {
-    width: '100%',
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.LG,
-    borderLeftWidth: 4,
-    borderLeftColor: COLORS.PRIMARY,
-  },
-
-  backupTipsTitle: {
-    fontSize: TYPOGRAPHY.BODY,
-    fontWeight: TYPOGRAPHY.SEMIBOLD,
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: SPACING.SM,
-  },
-
-  backupTip: {
-    fontSize: TYPOGRAPHY.BODY,
-    color: COLORS.TEXT_SECONDARY,
-    marginBottom: SPACING.XS,
-    paddingLeft: SPACING.SM,
-  },
-  
   successContainer: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-
+  
   successIcon: {
     width: 80,
     height: 80,
@@ -778,84 +771,5 @@ const styles = StyleSheet.create({
   
   actionButtonTextDisabled: {
     color: COLORS.TEXT_TERTIARY,
-  },
-  
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: COLORS.OVERLAY,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: SPACING.LG,
-  },
-  
-  modalContent: {
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: SPACING.XL,
-    width: '100%',
-    maxHeight: '80%',
-  },
-  
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.XL,
-  },
-  
-  modalTitle: {
-    fontSize: TYPOGRAPHY.TITLE,
-    fontWeight: TYPOGRAPHY.BOLD,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  modalCloseButton: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  
-  modalCloseText: {
-    fontSize: 18,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  
-  modalSeedGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.XL,
-  },
-  
-  modalSeedWord: {
-    width: '30%',
-    backgroundColor: COLORS.SURFACE_ELEVATED,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.MD,
-    marginBottom: SPACING.SM,
-    alignItems: 'center',
-  },
-  
-  modalSeedNumber: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_TERTIARY,
-    marginBottom: SPACING.XS,
-  },
-  
-  modalSeedText: {
-    fontSize: TYPOGRAPHY.BODY,
-    fontWeight: TYPOGRAPHY.MEDIUM,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  modalWarning: {
-    fontSize: TYPOGRAPHY.BODY,
-    color: COLORS.WARNING,
-    textAlign: 'center',
-    backgroundColor: COLORS.BACKGROUND,
-    padding: SPACING.LG,
-    borderRadius: RADIUS.MD,
   },
 }); 

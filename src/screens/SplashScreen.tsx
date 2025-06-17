@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Image,
   Easing,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
@@ -32,6 +33,7 @@ type Props = {
 };
 
 const { width, height } = Dimensions.get('window');
+const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
 // Splash screen floating images array
 const floatingImages = [
@@ -65,12 +67,13 @@ export default function SplashScreen({ navigation }: Props) {
   const [showContent, setShowContent] = useState(false);
   const [animationComplete, setAnimationComplete] = useState(false);
   const [showFloatingImages, setShowFloatingImages] = useState(false);
+  const [hasExistingWallet, setHasExistingWallet] = useState<boolean | null>(null);
   
   // Main animation values
   const imageScale = useRef(new Animated.Value(4.0)).current; // Start at 400% zoom
   const imageTranslateX = useRef(new Animated.Value(0)).current; // Start centered horizontally
   const imageTranslateY = useRef(new Animated.Value(height * 1.3)).current; // Start from very bottom (mostly off-screen)
-  const imageOpacity = useRef(new Animated.Value(0)).current;
+  const imageOpacity = useRef(new Animated.Value(1)).current; // Start visible immediately
   const contentFadeAnim = useRef(new Animated.Value(0)).current;
   const titleSlideAnim = useRef(new Animated.Value(30)).current;
   const buttonsSlideAnim = useRef(new Animated.Value(50)).current;
@@ -84,10 +87,11 @@ export default function SplashScreen({ navigation }: Props) {
       const angle = index * angleStep;
       
       // Position on screen edges with some margin
-      const margin = 60;
+      const margin =0;
       const centerX = width / 2;
-      const centerY = height / 2;
-      const radiusX = (width / 2) - margin;
+      const centerY = height;
+      let radiusX = (width / 1.9) - margin;
+      index === 1 ? radiusX = (width / 6) - margin : radiusX = (width / 1.3) - margin;
       const radiusY = (height / 2) - margin;
       
       const baseX = centerX + Math.cos(angle) * radiusX - centerX;
@@ -100,18 +104,14 @@ export default function SplashScreen({ navigation }: Props) {
         translateY: new Animated.Value(baseY),
         rotation: new Animated.Value(Math.random() * 360),
                  scale: new Animated.Value(
-           index === 1 ? 1.2 + Math.random() * 0.3 : 0.4 + Math.random() * 0.3
+           index === 1 ? 1.2 + Math.random() * 0.3 : 0.5 + Math.random() * 0.3
          ), // splash8.png (index 1) is much bigger: 1.2-1.5x, others: 0.4-0.7x
         opacity: new Animated.Value(0),
       };
     })
   ).current;
 
-  useEffect(() => {
-    startAnimation();
-  }, []);
-
-  const startFloatingAnimations = () => {
+  const startFloatingAnimations = useCallback(() => {
     setShowFloatingImages(true);
     
     // Fade in all floating images
@@ -153,75 +153,111 @@ export default function SplashScreen({ navigation }: Props) {
         })
       ).start();
     });
-  };
+  }, [floatingAnimations]);
 
-  const startAnimation = () => {
-    // First, fade in the image
-    Animated.timing(imageOpacity, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-             // Then animate the image moving and scaling
-       Animated.parallel([
-         Animated.timing(imageScale, {
-           toValue: 1, // Scale down to normal size
-           duration: 3500, // Much slower animation
-           easing: Easing.out(Easing.cubic),
-           useNativeDriver: true,
-         }),
-         Animated.timing(imageTranslateY, {
-           toValue: 0, // Move up to final position
-           duration: 3500, // Much slower animation
-           easing: Easing.out(Easing.cubic),
-           useNativeDriver: true,
-         }),
-       ]).start(() => {
-        // Animation complete, show content
-        setShowContent(true);
-        setAnimationComplete(true);
-        
-        // Animate content appearance
-        Animated.sequence([
-          Animated.parallel([
-            Animated.timing(contentFadeAnim, {
-              toValue: 1,
-              duration: 800,
-              useNativeDriver: true,
-            }),
-            Animated.timing(titleSlideAnim, {
-              toValue: 0,
-              duration: 800,
-              easing: Easing.out(Easing.back(1.2)),
-              useNativeDriver: true,
-            }),
-          ]),
-          Animated.timing(buttonsSlideAnim, {
+  const checkExistingWallets = useCallback(async () => {
+    try {
+      const storedWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      if (storedWallets) {
+        const wallets = JSON.parse(storedWallets);
+        setHasExistingWallet(wallets.length > 0);
+      } else {
+        setHasExistingWallet(false);
+      }
+    } catch (error) {
+      console.error('Error checking existing wallets:', error);
+      setHasExistingWallet(false);
+    }
+  }, []);
+
+  const startAnimation = useCallback(() => {
+    // Start moving and scaling the image immediately (no fade-in delay)
+    Animated.parallel([
+      Animated.timing(imageScale, {
+        toValue: 1, // Scale down to normal size
+        duration: 2000, // Reduced from 3500ms to 2000ms
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(imageTranslateY, {
+        toValue: 0, // Move up to final position
+        duration: 2000, // Reduced from 3500ms to 2000ms
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      // Animation complete, check if we have existing wallet
+      setAnimationComplete(true);
+      
+      // If we have an existing wallet, redirect to MainTabs after a short delay
+      if (hasExistingWallet) {
+        setTimeout(() => {
+          navigation.replace('MainTabs');
+        }, 800); // Give a moment to see the completed animation
+        return;
+      }
+      
+      // If no existing wallet, show content
+      setShowContent(true);
+      
+      // Animate content appearance
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(contentFadeAnim, {
+            toValue: 1,
+            duration: 600, // Reduced from 800ms
+            useNativeDriver: true,
+          }),
+          Animated.timing(titleSlideAnim, {
             toValue: 0,
-            duration: 600,
-            delay: 200,
+            duration: 600, // Reduced from 800ms
             easing: Easing.out(Easing.back(1.2)),
             useNativeDriver: true,
           }),
-        ]).start(() => {
-          // Start floating brainrot animations after everything is in place
-          setTimeout(() => {
-            startFloatingAnimations();
-          }, 1000);
-        });
+        ]),
+        Animated.timing(buttonsSlideAnim, {
+          toValue: 0,
+          duration: 400, // Reduced from 600ms
+          delay: 100, // Reduced from 200ms
+          easing: Easing.out(Easing.back(1.2)),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Start floating brainrot animations after everything is in place
+        setTimeout(() => {
+          startFloatingAnimations();
+        }, 500); // Reduced from 1000ms
       });
     });
-  };
+  }, [imageScale, imageTranslateY, contentFadeAnim, titleSlideAnim, buttonsSlideAnim, startFloatingAnimations, hasExistingWallet, navigation]);
 
-  const handleCreateWallet = () => {
+  useEffect(() => {
+    // Check for existing wallets first
+    checkExistingWallets();
+  }, [checkExistingWallets]);
+
+  useEffect(() => {
+    // Only start animation after we've checked for existing wallets
+    if (hasExistingWallet !== null) {
+      const timeoutId = setTimeout(() => {
+        startAnimation();
+      }, 100);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [startAnimation, hasExistingWallet]);
+
+  const handleCreateWallet = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     navigation.navigate('CreateWallet');
-  };
+  }, [navigation]);
 
-  const handleRestoreWallet = () => {
+  const handleRestoreWallet = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     navigation.navigate('Restore');
-  };
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
