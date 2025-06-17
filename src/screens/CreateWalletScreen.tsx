@@ -255,11 +255,11 @@ export default function CreateWalletScreen({ navigation }: Props) {
         return (
           <View style={styles.stepContainer}>
             <View style={styles.warningContainer}>
-              <Text style={styles.warningEmoji}>🔐</Text>
+              <Image 
+                source={require('../../assets/icons/locker.png')} 
+                style={styles.warningIcon}
+              />
               <Text style={styles.stepTitle}>Backup Your Seed</Text>
-              <Text style={styles.warningText}>
-                Write down these 12 words in order. This is the ONLY way to recover your wallet.
-              </Text>
             </View>
 
             <TouchableOpacity 
@@ -621,8 +621,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.XL,
   },
   
-  warningEmoji: {
-    fontSize: 48,
+  warningIcon: {
+    width: 50,
+    height: 50,
     marginBottom: SPACING.MD,
   },
   

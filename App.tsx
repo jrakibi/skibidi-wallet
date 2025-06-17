@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+import SplashScreen from './src/screens/SplashScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import WalletManagerScreen from './src/screens/WalletManagerScreen';
 import SendScreen from './src/screens/SendScreen';
@@ -27,6 +28,7 @@ export type WalletData = {
 };
 
 export type RootStackParamList = {
+  Splash: undefined;
   Onboarding: undefined;
   MainTabs: undefined;
   Home: { selectedWallet?: WalletData } | undefined;
@@ -50,12 +52,13 @@ export default function App() {
       <StatusBar style="light" backgroundColor="#0D0D0D" />
       <NavigationContainer>
         <Stack.Navigator
-          initialRouteName="Onboarding"
+          initialRouteName="Splash"
           screenOptions={{
             headerShown: false,
             gestureEnabled: true,
           }}
         >
+          <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           <Stack.Screen name="MainTabs" component={TabNavigator} />
           <Stack.Screen name="Home" component={HomeScreen} />
