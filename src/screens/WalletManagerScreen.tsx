@@ -99,6 +99,12 @@ export default function WalletManagerScreen({ navigation }: Props) {
           onPress: async () => {
             const updatedWallets = wallets.filter(w => w.id !== walletId);
             await saveWallets(updatedWallets);
+            
+            // If we deleted the last wallet, navigate to splash screen
+            if (updatedWallets.length === 0) {
+              navigation.replace('Splash');
+            }
+            
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           },
         },
@@ -114,6 +120,11 @@ export default function WalletManagerScreen({ navigation }: Props) {
   const navigateToEducation = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     navigation.navigate('Education');
+  };
+
+  const navigateToBackup = (wallet: WalletData) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('Backup', { mnemonic: wallet.mnemonic });
   };
 
   useFocusEffect(
@@ -154,25 +165,35 @@ export default function WalletManagerScreen({ navigation }: Props) {
           ) : (
             <View style={styles.walletsList}>
               {wallets.map((wallet) => (
-                <TouchableOpacity
-                  key={wallet.id}
-                  style={styles.walletCard}
-                  onPress={() => selectWallet(wallet)}
-                  onLongPress={() => deleteWallet(wallet.id, wallet.name)}
-                >
-                  <View style={styles.walletInfo}>
-                    <Text style={styles.walletName}>{wallet.name}</Text>
-                    <Text style={styles.walletAddress}>
-                      {wallet.address.substring(0, 8)}...{wallet.address.substring(wallet.address.length - 8)}
-                    </Text>
-                  </View>
+                <View key={wallet.id} style={styles.walletCard}>
                   <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => deleteWallet(wallet.id, wallet.name)}
+                    style={styles.walletMainInfo}
+                    onPress={() => selectWallet(wallet)}
+                    onLongPress={() => deleteWallet(wallet.id, wallet.name)}
                   >
-                    <Text style={styles.deleteButtonText}>🗑️</Text>
+                    <View style={styles.walletInfo}>
+                      <Text style={styles.walletName}>{wallet.name}</Text>
+                      <Text style={styles.walletAddress}>
+                        {wallet.address.substring(0, 8)}...{wallet.address.substring(wallet.address.length - 8)}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
-                </TouchableOpacity>
+                  
+                  <View style={styles.walletActions}>
+                    <TouchableOpacity
+                      style={styles.backupButton}
+                      onPress={() => navigateToBackup(wallet)}
+                    >
+                      <Text style={styles.backupButtonText}>🔒</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteButton}
+                      onPress={() => deleteWallet(wallet.id, wallet.name)}
+                    >
+                      <Text style={styles.deleteButtonText}>🗑️</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               ))}
             </View>
           )}
@@ -367,5 +388,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.TEXT_PRIMARY,
+  },
+  
+  walletMainInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
+  walletActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.SM,
+  },
+  
+  backupButton: {
+    backgroundColor: COLORS.PRIMARY + '20',
+    borderRadius: RADIUS.MD,
+    padding: SPACING.XS,
+    borderWidth: 1,
+    borderColor: COLORS.PRIMARY,
+  },
+  
+  backupButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.PRIMARY,
   },
 }); 

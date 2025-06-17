@@ -138,7 +138,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     startCardFloatingAnimation();
   }, []); // Remove route.params dependency to prevent re-running on every navigation
 
-  // Separate useEffect for route params changes
+  // Handle route params for selected wallet
   useEffect(() => {
     if (route.params?.selectedWallet && route.params.selectedWallet.id !== selectedWallet?.id) {
       console.log('Route params changed, setting new wallet:', route.params.selectedWallet.name);
@@ -156,7 +156,11 @@ export default function HomeScreen({ navigation, route }: Props) {
   // Add focus effect to refresh data when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      // Only refresh if we have a selected wallet and we're not already loading
+      console.log('Screen focused, refreshing wallet list and data');
+      // Always refresh wallet list when screen comes into focus
+      loadWallets();
+      
+      // Only refresh wallet data if we have a selected wallet and we're not already loading
       if (selectedWallet && !isLoadingWalletData) {
         console.log('Screen focused, refreshing wallet data for:', selectedWallet.name);
         // Add a small delay to prevent rapid-fire calls
@@ -174,10 +178,19 @@ export default function HomeScreen({ navigation, route }: Props) {
       const storedWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
       if (storedWallets) {
         const parsedWallets = JSON.parse(storedWallets);
+        const oldWalletCount = wallets.length;
         setWallets(parsedWallets);
-        // Only auto-select first wallet if no wallet was passed via navigation
-        if (parsedWallets.length > 0 && !selectedWallet && !route.params?.selectedWallet) {
+        
+        // Auto-select first wallet if no wallet is currently selected
+        if (parsedWallets.length > 0 && !selectedWallet) {
+          console.log('No wallet selected, auto-selecting first wallet:', parsedWallets[0].name);
           setSelectedWallet(parsedWallets[0]);
+        }
+        // If we have new wallets (e.g., just created one), select the newest one
+        else if (parsedWallets.length > oldWalletCount && oldWalletCount > 0) {
+          const newestWallet = parsedWallets[parsedWallets.length - 1];
+          console.log('New wallet detected, selecting newest wallet:', newestWallet.name);
+          setSelectedWallet(newestWallet);
         }
       }
     } catch (error) {
@@ -405,8 +418,17 @@ export default function HomeScreen({ navigation, route }: Props) {
               setWallets(updatedWallets);
               await AsyncStorage.setItem(WALLETS_STORAGE_KEY, JSON.stringify(updatedWallets));
               
-              if (selectedWallet?.id === walletToDelete.id) {
-                setSelectedWallet(updatedWallets.length > 0 ? updatedWallets[0] : null);
+              // If we deleted the last wallet, navigate to splash screen
+              if (updatedWallets.length === 0) {
+                // Clear the selected wallet
+                setSelectedWallet(null);
+                // Navigate to splash screen with floating animations
+                navigation.replace('Splash');
+              } else {
+                // If we deleted the currently selected wallet, select the first remaining wallet
+                if (selectedWallet?.id === walletToDelete.id) {
+                  setSelectedWallet(updatedWallets[0]);
+                }
               }
               
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -568,6 +590,13 @@ export default function HomeScreen({ navigation, route }: Props) {
               </View>
               <Text style={styles.dropdownIcon}>⌄</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.walletMenuButton}
+              onPress={navigateToBackup}
+            >
+              <Text style={styles.walletMenuIcon}>🔒</Text>
+            </TouchableOpacity>
           </View>
         </Animated.View>
 
@@ -696,14 +725,12 @@ export default function HomeScreen({ navigation, route }: Props) {
                   {selectedWallet?.id === wallet.id && (
                     <Text style={styles.walletListCheckmark}>✓</Text>
                   )}
-                  {wallets.length > 1 && (
-                    <TouchableOpacity
-                      style={styles.walletListDelete}
-                      onPress={() => deleteWallet(wallet)}
-                    >
-                      <Text style={styles.walletListDeleteText}>🗑</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.walletListDelete}
+                    onPress={() => deleteWallet(wallet)}
+                  >
+                    <Text style={styles.walletListDeleteText}>🗑</Text>
+                  </TouchableOpacity>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -787,6 +814,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: COLORS.TEXT_SECONDARY,
     marginLeft: SPACING.SM,
+  },
+  walletMenuButton: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.SM,
+    marginLeft: SPACING.SM,
+  },
+  walletMenuIcon: {
+    fontSize: 16,
+    color: COLORS.TEXT_PRIMARY,
   },
 
   // Card Container
@@ -992,6 +1029,10 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.SMALL,
     fontWeight: TYPOGRAPHY.SEMIBOLD,
     color: COLORS.TEXT_PRIMARY,
+  },
+  backupActionButton: {
+    backgroundColor: COLORS.PRIMARY + '20',
+    borderColor: COLORS.PRIMARY,
   },
 
   // Empty State

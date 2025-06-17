@@ -160,10 +160,41 @@ export default function CreateWalletScreen({ navigation }: Props) {
       // Check if wallet with same ID already exists
       const existingWallet = wallets.find((w: WalletData) => w.id === generatedWallet.wallet_id);
       if (existingWallet) {
+        // Debug: Show all existing wallets
+        console.log('=== DEBUGGING WALLET COLLISION ===');
+        console.log('Existing wallets in storage:');
+        wallets.forEach((wallet: WalletData, index: number) => {
+          console.log(`Wallet ${index + 1}:`);
+          console.log(`  Name: ${wallet.name}`);
+          console.log(`  ID: ${wallet.id}`);
+          console.log(`  Address: ${wallet.address}`);
+          console.log(`  Created: ${wallet.createdAt}`);
+        });
+        console.log(`New wallet trying to be created:`);
+        console.log(`  ID: ${generatedWallet.wallet_id}`);
+        console.log(`  Address: ${generatedWallet.address}`);
+        console.log('=== END DEBUG INFO ===');
+
         Alert.alert(
           'Wallet Already Exists',
-          `A wallet with this seed phrase already exists: "${existingWallet.name}". Each seed phrase can only be used once.`,
-          [{ text: 'OK', onPress: () => setCurrentStep('name') }]
+          `A wallet with this seed phrase already exists: "${existingWallet.name}". Each seed phrase can only be used once.
+
+Existing wallets:
+${wallets.map((w: WalletData, i: number) => `${i + 1}. ${w.name}`).join('\n')}
+
+Would you like to delete existing wallets or try creating with a different approach?`,
+          [
+            { text: 'Cancel', onPress: () => setCurrentStep('name') },
+            { 
+              text: 'Clear All Wallets', 
+              style: 'destructive',
+              onPress: async () => {
+                await AsyncStorage.removeItem(WALLETS_STORAGE_KEY);
+                Alert.alert('Cleared', 'All wallets have been cleared. Try creating again.');
+                setCurrentStep('name');
+              }
+            }
+          ]
         );
         return;
       }
@@ -185,7 +216,7 @@ export default function CreateWalletScreen({ navigation }: Props) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       setTimeout(() => {
-        // Navigate to MainTabs to ensure navigation bar is shown
+        // Navigate to MainTabs (which contains HomeTab)
         navigation.navigate('MainTabs');
       }, 2000);
     } catch (error) {

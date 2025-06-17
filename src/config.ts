@@ -1,7 +1,7 @@
 // API Configuration
 const config = {
   development: {
-    API_BASE_URL: 'https://skibidi-backend-production.up.railway.app',
+    API_BASE_URL: 'http://192.168.1.10:8080',
   },
   production: {
     API_BASE_URL: 'https://skibidi-backend-production.up.railway.app',
