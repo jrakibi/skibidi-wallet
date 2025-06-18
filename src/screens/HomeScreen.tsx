@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RouteProp } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { RootStackParamList, WalletData } from '../../App';
 import { 
   COLORS, 
@@ -611,7 +612,7 @@ export default function HomeScreen({ navigation, route }: Props) {
               style={styles.walletMenuButton}
               onPress={navigateToBackup}
             >
-              <Text style={styles.walletMenuIcon}>🔒</Text>
+              <Ionicons name="lock-closed" size={20} color={COLORS.TEXT_SECONDARY} />
             </TouchableOpacity>
           </View>
         </Animated.View>
