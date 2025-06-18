@@ -26,6 +26,9 @@ import {
 } from '../theme';
 import QRCode from 'react-native-qrcode-svg';
 import { getApiUrl } from '../config';
+import ContactListModal from '../components/ContactListModal';
+import { Contact } from '../components/ContactCard';
+import { Ionicons } from '@expo/vector-icons';
 
 type SendScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Send'>;
 type SendScreenRouteProp = RouteProp<RootStackParamList, 'Send'>;
@@ -42,59 +45,30 @@ export default function SendScreen({ navigation, route }: Props) {
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
-  const [showUSD, setShowUSD] = useState(false);
+
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'animating' | 'success' | 'printing' | 'receipt'>('idle');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [isAddressFocused, setIsAddressFocused] = useState(false);
+  const [isAmountFocused, setIsAmountFocused] = useState(false);
   
   // Bitcoin price (you might want to fetch this from an API)
   const BTC_PRICE_USD = 43000; // Example price, should be fetched from API
   const SATS_PER_BTC = 100000000;
   
-  // Conversion functions
+  // Conversion function
   const satsToUSD = (sats: number) => {
     return ((sats / SATS_PER_BTC) * BTC_PRICE_USD).toFixed(2);
-  };
-  
-  const usdToSats = (usd: number) => {
-    return Math.round((usd / BTC_PRICE_USD) * SATS_PER_BTC);
-  };
-  
-  const getDisplayAmount = () => {
-    if (!amount) return '';
-    const numAmount = Number(amount);
-    if (isNaN(numAmount)) return amount;
-    
-    if (showUSD) {
-      return satsToUSD(numAmount);
-    }
-    return amount;
   };
   
   const getSecondaryAmount = () => {
     if (!amount) return '';
     const numAmount = Number(amount);
     if (isNaN(numAmount)) return '';
-    
-    if (showUSD) {
-      return `${numAmount.toLocaleString()} sats`;
-    }
     return `$${satsToUSD(numAmount)}`;
   };
-  
-  const handleAmountChange = (text: string) => {
-    if (showUSD) {
-      // Convert USD input to sats for storage
-      const usdAmount = Number(text);
-      if (!isNaN(usdAmount)) {
-        setAmount(usdToSats(usdAmount).toString());
-      } else {
-        setAmount('');
-      }
-    } else {
-      setAmount(text);
-    }
-  };
-  
+
   // Enhanced animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef(new Animated.Value(0)).current;
@@ -435,6 +409,21 @@ export default function SendScreen({ navigation, route }: Props) {
     Keyboard.dismiss();
   };
 
+  const handleSelectContact = (contact: Contact) => {
+    setSelectedContact(contact);
+    setAddress(contact.address);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const openContactModal = () => {
+    setShowContactModal(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const closeContactModal = () => {
+    setShowContactModal(false);
+  };
+
   return (
     <TouchableWithoutFeedback onPress={dismissKeyboard}>
       <View style={styles.container}>
@@ -490,54 +479,143 @@ export default function SendScreen({ navigation, route }: Props) {
               {/* Bitcoin Address */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>TO</Text>
-                <TextInput
-                  style={styles.input}
-                  value={address}
-                  onChangeText={setAddress}
-                  placeholder="Bitcoin Address"
-                  placeholderTextColor={COLORS.TEXT_TERTIARY}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  multiline={false}
-                  editable={animationPhase === 'idle'}
-                  returnKeyType="next"
-                  onSubmitEditing={() => {
-                    // Focus on amount input or dismiss keyboard
-                    Keyboard.dismiss();
-                  }}
-                  blurOnSubmit={true}
-                />
+                {selectedContact ? (
+                  <View style={styles.selectedContactContainer}>
+                    <View style={styles.selectedContactInfo}>
+                      <Image 
+                        source={selectedContact.imageSource} 
+                        style={styles.selectedContactImage}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.selectedContactDetails}>
+                        <Text style={styles.selectedContactName}>{selectedContact.name}</Text>
+                        <Text style={styles.selectedContactAddress}>
+                          {selectedContact.address.substring(0, 8)}...{selectedContact.address.substring(selectedContact.address.length - 8)}
+                        </Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity 
+                      style={styles.clearContactButton}
+                      onPress={() => {
+                        setSelectedContact(null);
+                        setAddress('');
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      }}
+                    >
+                      <Ionicons 
+                        name="close" 
+                        size={14} 
+                        color={COLORS.TEXT_SECONDARY} 
+                      />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={[
+                    styles.inputContainer,
+                    isAddressFocused && styles.inputContainerFocused
+                  ]}>
+                    <TextInput
+                      style={styles.inputWithIcons}
+                      value={address}
+                      onChangeText={(text) => {
+                        setAddress(text);
+                        // Clear selected contact if user types manually
+                        if (selectedContact) {
+                          setSelectedContact(null);
+                        }
+                      }}
+                      placeholder="Search or Enter"
+                      placeholderTextColor={COLORS.TEXT_TERTIARY}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      multiline={false}
+                      editable={animationPhase === 'idle'}
+                      returnKeyType="next"
+                      onFocus={() => setIsAddressFocused(true)}
+                      onBlur={() => setIsAddressFocused(false)}
+                      onSubmitEditing={() => {
+                        // Focus on amount input or dismiss keyboard
+                        Keyboard.dismiss();
+                      }}
+                      blurOnSubmit={true}
+                    />
+                    <View style={styles.inputActions}>
+                      <TouchableOpacity 
+                        style={styles.actionButton}
+                        onPress={() => {
+                          // Paste functionality would go here
+                          console.log('Paste tapped');
+                        }}
+                        disabled={animationPhase !== 'idle'}
+                      >
+                        <Text style={[
+                          styles.actionButtonText,
+                          isAddressFocused && styles.actionButtonTextFocused
+                        ]}>Paste</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[
+                          styles.iconButton,
+                          isAddressFocused && styles.iconButtonFocused
+                        ]}
+                        onPress={openContactModal}
+                        disabled={animationPhase !== 'idle'}
+                      >
+                        <Ionicons 
+                          name="people-outline" 
+                          size={18} 
+                          color={isAddressFocused ? '#FF6B00' : COLORS.TEXT_PRIMARY} 
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[
+                          styles.iconButton,
+                          isAddressFocused && styles.iconButtonFocused
+                        ]}
+                                              onPress={() => {
+                        navigation.navigate('QRScanner', {
+                          onScan: (scannedData: string) => {
+                            setAddress(scannedData);
+                            setSelectedContact(null); // Clear any selected contact
+                          }
+                        });
+                      }}
+                        disabled={animationPhase !== 'idle'}
+                      >
+                        <Ionicons 
+                          name="qr-code-outline" 
+                          size={18} 
+                          color={isAddressFocused ? '#FF6B00' : COLORS.TEXT_PRIMARY} 
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </View>
 
               {/* Amount */}
               <View style={styles.inputGroup}>
-                <View style={styles.amountHeader}>
-                  <Text style={styles.inputLabel}>AMOUNT</Text>
-                  <TouchableOpacity 
-                    style={styles.currencyToggle}
-                    onPress={() => setShowUSD(!showUSD)}
-                    disabled={animationPhase !== 'idle'}
-                  >
-                    <Text style={styles.currencyToggleText}>
-                      {showUSD ? 'USD' : 'SATS'} ↓
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.amountContainer}>
+                <Text style={styles.inputLabel}>AMOUNT</Text>
+                <View style={[
+                  styles.amountContainer,
+                  isAmountFocused && styles.amountContainerFocused
+                ]}>
                   <TextInput
                     style={styles.amountInput}
-                    value={getDisplayAmount()}
-                    onChangeText={handleAmountChange}
+                    value={amount}
+                    onChangeText={setAmount}
                     placeholder="0"
                     placeholderTextColor={COLORS.TEXT_TERTIARY}
                     keyboardType="numeric"
                     editable={animationPhase === 'idle'}
                     returnKeyType="done"
                     onSubmitEditing={dismissKeyboard}
+                    onFocus={() => setIsAmountFocused(true)}
+                    onBlur={() => setIsAmountFocused(false)}
                     blurOnSubmit={true}
                   />
                   <Text style={styles.satLabel}>
-                    {showUSD ? 'USD' : 'SATS'}
+                    SATS
                   </Text>
                 </View>
                 {getSecondaryAmount() && (
@@ -740,6 +818,14 @@ export default function SendScreen({ navigation, route }: Props) {
             </Animated.View>
           )}
 
+        {/* Contact Selection Modal */}
+        <ContactListModal
+          visible={showContactModal}
+          onClose={closeContactModal}
+          onSelectContact={handleSelectContact}
+          selectedContactId={selectedContact?.id}
+        />
+
       </View>
     </TouchableWithoutFeedback>
   );
@@ -781,12 +867,17 @@ const styles = StyleSheet.create({
   },
   amountContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: COLORS.BORDER_LIGHT,
     paddingHorizontal: SPACING.SM,
     paddingVertical: SPACING.XS,
   },
+  
+  amountContainerFocused: {
+    borderBottomColor: '#FF6B00',
+  },
+  
   amountInput: {
     flex: 1,
     fontSize: TYPOGRAPHY.TITLE,
@@ -795,12 +886,20 @@ const styles = StyleSheet.create({
     padding: 0,
     minHeight: 36,
   },
+  
   satLabel: {
     fontSize: TYPOGRAPHY.SMALL,
     fontWeight: TYPOGRAPHY.BOLD,
     color: COLORS.TEXT_SECONDARY,
     marginLeft: SPACING.SM,
     letterSpacing: 1,
+  },
+  
+  secondaryAmount: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_TERTIARY,
+    marginTop: SPACING.SM,
+    textAlign: 'center',
   },
   instructionAboveCharacter: {
     position: 'absolute',
@@ -830,35 +929,10 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   characterImage: {
-    width: 150,
-    height: 150,
+    width: 200,
+    height: 200,
   },
-  amountHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: SPACING.SM,
-  },
-  currencyToggle: {
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: SPACING.XS,
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT,
-  },
-  currencyToggleText: {
-    fontSize: TYPOGRAPHY.SMALL,
-    fontWeight: TYPOGRAPHY.BOLD,
-    color: COLORS.TEXT_SECONDARY,
-    letterSpacing: 1,
-  },
-  secondaryAmount: {
-    fontSize: TYPOGRAPHY.SMALL,
-    color: COLORS.TEXT_TERTIARY,
-    marginTop: SPACING.SM,
-    textAlign: 'center',
-  },
+  
   backButton: {
     position: 'absolute',
     top: 60,
@@ -927,15 +1001,15 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT_PRIMARY,
   },
   atmContainer: {
-    height: 220,
+    height: 250,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.LG,
     marginTop: SPACING.MD,
   },
   atmImage: {
-    width: 200,
-    height: 200,
+    width: 300,
+    height: 300,
   },
   receiptContainer: {
     position: 'absolute',
@@ -1358,5 +1432,105 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 1,
     marginTop: SPACING.LG,
+  },
+  
+  // Contact selection styles
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    borderBottomWidth: 2,
+    borderBottomColor: COLORS.BORDER_LIGHT,
+    paddingBottom: SPACING.XS,
+  },
+  inputContainerFocused: {
+    borderBottomColor: '#FF6B00', // Orange accent on focus
+  },
+  inputWithIcons: {
+    flex: 1,
+    padding: SPACING.SM,
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    backgroundColor: 'transparent',
+    minHeight: 36,
+  },
+  inputActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: SPACING.SM,
+  },
+  actionButton: {
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS,
+    marginRight: SPACING.XS,
+  },
+  actionButtonText: {
+    fontSize: TYPOGRAPHY.SMALL,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  actionButtonTextFocused: {
+    color: '#FF6B00', // Orange accent on focus
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.SM,
+    marginLeft: SPACING.XS,
+  },
+  iconButtonFocused: {
+    backgroundColor: COLORS.SURFACE_ELEVATED,
+  },
+  selectedContactContainer: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    borderWidth: 2,
+    borderColor: '#FF6B00', // Orange accent to match
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selectedContactInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  selectedContactImage: {
+    width: 24,
+    height: 24,
+    borderRadius: RADIUS.SM,
+    marginRight: SPACING.SM,
+  },
+  selectedContactDetails: {
+    flex: 1,
+  },
+  selectedContactName: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.XS / 2,
+  },
+  selectedContactAddress: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_TERTIARY,
+    fontFamily: 'monospace',
+  },
+  clearContactButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: COLORS.SURFACE_ELEVATED,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: SPACING.SM,
+  },
+  clearContactText: {
+    fontSize: 12,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: TYPOGRAPHY.BOLD,
   },
 }); 

@@ -50,6 +50,16 @@ const WALLET_ICONS = [
   require('../../assets/brainrot/brainrot6.png'),
 ];
 
+// Brainrot names corresponding to each icon
+const BRAINROT_NAMES = [
+  'Tung Tung Sahur',      // brainrot1
+  'Tung Sahur',           // brainrot2  
+  'Ballerina Cappuccina', // brainrot3
+  'Bombardiro Crocodilo', // brainrot4
+  'Tralalero Tralala',    // brainrot5
+  'Skibidi',              // brainrot6
+];
+
 export default function RestoreScreen({ navigation }: Props) {
   const [currentStep, setCurrentStep] = useState<Step>('input');
   const [mnemonic, setMnemonic] = useState('');
@@ -62,6 +72,45 @@ export default function RestoreScreen({ navigation }: Props) {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
   const [progressAnim] = useState(new Animated.Value(0));
+
+  // Initialize with the first brainrot name when we reach customize step
+  useEffect(() => {
+    if (currentStep === 'customize' && !walletName) {
+      generateUniqueWalletName(0);
+    }
+  }, [currentStep]);
+
+  // Function to generate a unique wallet name based on brainrot selection
+  const generateUniqueWalletName = async (iconIndex: number) => {
+    try {
+      const existingWallets = await AsyncStorage.getItem(WALLETS_STORAGE_KEY);
+      const wallets = existingWallets ? JSON.parse(existingWallets) : [];
+      
+      const baseName = BRAINROT_NAMES[iconIndex % BRAINROT_NAMES.length];
+      
+      // Check if the base name already exists
+      const existingNames = wallets.map((w: WalletData) => w.name);
+      
+      if (!existingNames.includes(baseName)) {
+        setWalletName(baseName);
+        return;
+      }
+      
+      // Find the next available number
+      let counter = 2;
+      let uniqueName = `${baseName} ${counter}`;
+      
+      while (existingNames.includes(uniqueName)) {
+        counter++;
+        uniqueName = `${baseName} ${counter}`;
+      }
+      
+      setWalletName(uniqueName);
+    } catch (error) {
+      // Fallback to base name if there's an error
+      setWalletName(BRAINROT_NAMES[iconIndex % BRAINROT_NAMES.length]);
+    }
+  };
 
   useEffect(() => {
     // Entrance animation
@@ -275,6 +324,7 @@ export default function RestoreScreen({ navigation }: Props) {
                     ]}
                     onPress={() => {
                       setSelectedIconIndex(index);
+                      generateUniqueWalletName(index);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     }}
                   >

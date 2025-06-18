@@ -79,10 +79,26 @@ const BRAINROT_ICONS = [
   require('../../assets/brainrot/brainrot6.png'),
 ];
 
+// Available wallet cards - mapped to brainrot selection
+const WALLET_CARDS = [
+  require('../../assets/cards/card1.png'),
+  require('../../assets/cards/card2.png'),
+  require('../../assets/cards/card3.png'),
+  require('../../assets/cards/card4.png'),
+  require('../../assets/cards/card5.png'),
+  require('../../assets/cards/card6.png'),
+];
+
 // Function to get icon for wallet based on iconIndex
 const getWalletIcon = (wallet: WalletData, fallbackIndex: number = 0) => {
   const iconIndex = wallet.iconIndex !== undefined ? wallet.iconIndex : fallbackIndex;
   return BRAINROT_ICONS[iconIndex % BRAINROT_ICONS.length];
+};
+
+// Function to get card for wallet based on iconIndex (brainrot selection)
+const getWalletCard = (wallet: WalletData, fallbackIndex: number = 0) => {
+  const iconIndex = wallet.iconIndex !== undefined ? wallet.iconIndex : fallbackIndex;
+  return WALLET_CARDS[iconIndex % WALLET_CARDS.length];
 };
 
 export default function HomeScreen({ navigation, route }: Props) {
@@ -614,7 +630,7 @@ export default function HomeScreen({ navigation, route }: Props) {
           }
         ]}>
           <Image
-            source={require('../../assets/skibidi.png')}
+            source={getWalletCard(selectedWallet, 0)}
             style={styles.cardImage}
             resizeMode="contain"
           />
@@ -828,14 +844,14 @@ const styles = StyleSheet.create({
 
   // Card Container
   cardContainer: {
-    marginHorizontal: SPACING.LG,
+    marginHorizontal: 0,
     marginBottom: SPACING.LG,
     alignItems: 'center',
   },
   cardImage: {
-    width: width - (SPACING.LG * 2),
+    width: width,
     height: 200,
-    borderRadius: RADIUS.LG,
+    borderRadius: 0,
   },
 
   // Balance Section - Cash App Style
