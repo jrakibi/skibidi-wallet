@@ -7,8 +7,12 @@ import {
   ScrollView,
   StatusBar,
   Animated,
+  Image,
+  Dimensions,
+  Linking,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../../App';
 import { 
@@ -20,106 +24,175 @@ import {
   ANIMATIONS 
 } from '../theme';
 
+const { width: screenWidth } = Dimensions.get('window');
+
 type EducationScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Education'>;
 
 type Props = {
   navigation: EducationScreenNavigationProp;
 };
 
-interface Lesson {
+interface Category {
   id: string;
   title: string;
+  subtitle: string;
   description: string;
-  emoji: string;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  completed: boolean;
-  locked: boolean;
-  points: number;
+  image: any;
+  backgroundColor: string;
+  buttonColor: string;
+  route?: string;
+  available: boolean;
 }
 
 export default function EducationScreen({ navigation }: Props) {
   const [fadeAnim] = useState(new Animated.Value(0));
-  const [totalPoints, setTotalPoints] = useState(0);
+  const [scaleAnim] = useState(new Animated.Value(0.9));
   
-  // Sample lessons structure - you can replace this with your actual lessons
-  const [lessons] = useState<Lesson[]>([
+  const categories: Category[] = [
     {
       id: '1',
-      title: 'What is Bitcoin?',
-      description: 'Learn the basics of Bitcoin',
-      emoji: '₿',
-      difficulty: 'beginner',
-      completed: false,
-      locked: false,
-      points: 10
+      title: 'LEARN',
+      subtitle: 'Bitcoin',
+      description: 'Essential concepts and fundamentals',
+      image: require('../../assets/learn/bitcoin.png'),
+      backgroundColor: COLORS.SURFACE_ELEVATED,
+      buttonColor: COLORS.BITCOIN_ORANGE,
+      route: 'BitcoinLessons',
+      available: true
     },
     {
       id: '2',
-      title: 'Bitcoin Wallets',
-      description: 'Understanding wallet types',
-      emoji: '👛',
-      difficulty: 'beginner',
-      completed: false,
-      locked: true,
-      points: 15
+      title: 'DISCOVER',
+      subtitle: 'Lightning',
+      description: 'Instant payment networks',
+      image: require('../../assets/learn/lightning.png'),
+      backgroundColor: COLORS.SURFACE,
+      buttonColor: COLORS.TEXT_TERTIARY,
+      route: 'LightningLessons',
+      available: false
     },
     {
       id: '3',
-      title: 'Private Keys',
-      description: 'Security fundamentals',
-      emoji: '🔐',
-      difficulty: 'intermediate',
-      completed: false,
-      locked: true,
-      points: 20
-    },
-    {
-      id: '4',
-      title: 'Lightning Network',
-      description: 'Fast Bitcoin payments',
-      emoji: '⚡',
-      difficulty: 'intermediate',
-      completed: false,
-      locked: true,
-      points: 25
-    },
-    {
-      id: '5',
-      title: 'Mining & Consensus',
-      description: 'How Bitcoin works',
-      emoji: '⛏️',
-      difficulty: 'advanced',
-      completed: false,
-      locked: true,
-      points: 30
+      title: 'CHAT',
+      subtitle: 'AI Tutor',
+      description: 'Get help with coding challenges',
+      image: require('../../assets/learn/AI.png'),
+      backgroundColor: COLORS.SURFACE,
+      buttonColor: COLORS.TEXT_TERTIARY,
+      route: 'SkibidiAI',
+      available: false
     }
-  ]);
+  ];
 
   useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: ANIMATIONS.MEDIUM,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: ANIMATIONS.MEDIUM,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      })
+    ]).start();
   }, []);
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner': return COLORS.SUCCESS;
-      case 'intermediate': return COLORS.WARNING;
-      case 'advanced': return COLORS.ERROR;
-      default: return COLORS.TEXT_SECONDARY;
+  const handleCategoryPress = (category: Category) => {
+    if (category.available && category.id === '1') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      navigation.navigate('Lesson', { lessonId: 'bitcoin-basics' });
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
-  const openLesson = (lesson: Lesson) => {
-    if (lesson.locked) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      return;
-    }
+  const handleLearnMorePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL('https://bitcoindevs.xyz/');
+  };
+
+  const renderCategoryCard = (category: Category, index: number) => {
+    const isComingSoon = !category.available;
     
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('Lesson', { lessonId: lesson.id });
+    return (
+      <Animated.View
+        key={category.id}
+        style={[
+          styles.categoryCard,
+          { backgroundColor: category.backgroundColor },
+          category.id === '1' && styles.availableCard,
+          isComingSoon && styles.comingSoonCard,
+          {
+            opacity: fadeAnim,
+            transform: [{ scale: scaleAnim }]
+          }
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => handleCategoryPress(category)}
+          activeOpacity={category.available ? 0.8 : 1}
+          disabled={!category.available}
+          style={styles.cardTouchable}
+        >
+          <View style={styles.cardContent}>
+            <View style={styles.cardLeft}>
+              <View style={[
+                styles.imageContainer,
+                category.id === '1' && styles.availableImageContainer,
+                isComingSoon && styles.comingSoonImageContainer
+              ]}>
+                <Image 
+                  source={category.image} 
+                  style={[
+                    styles.categoryImage,
+                    isComingSoon && styles.comingSoonImage
+                  ]} 
+                />
+              </View>
+            </View>
+            
+            <View style={styles.cardRight}>
+              <Text style={[
+                styles.categoryTitle,
+                isComingSoon && styles.comingSoonText
+              ]}>
+                {category.title}
+              </Text>
+              <Text style={[
+                styles.categorySubtitle,
+                isComingSoon && styles.comingSoonText
+              ]}>
+                {category.subtitle}
+              </Text>
+              <Text style={[
+                styles.categoryDescription,
+                isComingSoon && styles.comingSoonDescription
+              ]}>
+                {category.description}
+              </Text>
+            </View>
+          </View>
+          
+          <View style={[
+            styles.playButton, 
+            { backgroundColor: category.buttonColor },
+            isComingSoon && styles.comingSoonButton
+          ]}>
+            {isComingSoon ? (
+              <View style={styles.comingSoonBadge}>
+                <Ionicons name="time-outline" size={16} color={COLORS.TEXT_TERTIARY} />
+                <Text style={styles.comingSoonBadgeText}>SOON</Text>
+              </View>
+            ) : (
+              <Ionicons name="play" size={20} color={COLORS.TEXT_PRIMARY} />
+            )}
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+    );
   };
 
   return (
@@ -134,95 +207,84 @@ export default function EducationScreen({ navigation }: Props) {
         >
           <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Learn Bitcoin</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.headerTitle}>Learn</Text>
+        <TouchableOpacity style={styles.settingsButton}>
+          <Text style={styles.settingsIcon}>⚙</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView 
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: fadeAnim }}>
-          
-          {/* Progress Card */}
-          <View style={styles.progressCard}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Your Progress</Text>
-              <View style={styles.pointsBadge}>
-                <Text style={styles.pointsText}>{totalPoints} pts</Text>
+        {/* Hero Section */}
+        <Animated.View 
+          style={[
+            styles.heroSection,
+            { 
+              opacity: fadeAnim,
+              transform: [{ translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [30, 0]
+              })}]
+            }
+          ]}
+        >
+          <Text style={styles.heroTitle}>BDP Academy</Text>
+          <Text style={styles.heroSubtitle}>
+            From basics to advanced concepts, learn bitcoin development through hands-on interactive lessons.
+          </Text>
+        </Animated.View>
+
+        {/* Categories */}
+        <View style={styles.categoriesContainer}>
+          {categories.map((category, index) => (
+            <Animated.View
+              key={category.id}
+              style={{
+                opacity: fadeAnim,
+                transform: [{
+                  translateY: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50 + (index * 20), 0]
+                  })
+                }]
+              }}
+            >
+              {renderCategoryCard(category, index)}
+            </Animated.View>
+          ))}
+        </View>
+
+        {/* Learn More Section */}
+        <Animated.View 
+          style={[
+            styles.learnMoreSection,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: fadeAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [40, 0]
+              })}]
+            }
+          ]}
+        >
+          <Text style={styles.learnMoreTitle}>Want to level up?</Text>
+          <Text style={styles.learnMoreDescription}>
+            Access comprehensive bitcoin development courses, contribute to real projects, and join a community of builders.
+          </Text>
+          <TouchableOpacity 
+            style={styles.learnMoreButton}
+            onPress={handleLearnMorePress}
+          >
+            <View style={styles.learnMoreButtonContent}>
+              <Text style={styles.learnMoreButtonText}>Advanced Resources</Text>
+              <View style={styles.learnMoreButtonBadge}>
+                <Text style={styles.learnMoreButtonBadgeText}>FREE</Text>
               </View>
             </View>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: '20%' }]} />
-            </View>
-            <Text style={styles.progressSubtext}>
-              {lessons.filter(l => l.completed).length} of {lessons.length} lessons completed
-            </Text>
-          </View>
-
-          {/* Lessons List */}
-          <View style={styles.lessonsContainer}>
-            <Text style={styles.sectionTitle}>Lessons</Text>
-            
-            {lessons.map((lesson, index) => (
-              <TouchableOpacity
-                key={lesson.id}
-                style={[
-                  styles.lessonCard,
-                  lesson.locked && styles.lessonCardLocked,
-                  lesson.completed && styles.lessonCardCompleted
-                ]}
-                onPress={() => openLesson(lesson)}
-                activeOpacity={lesson.locked ? 1 : 0.7}
-              >
-                <View style={styles.lessonLeft}>
-                  <View style={[
-                    styles.lessonIcon,
-                    lesson.locked && styles.lessonIconLocked,
-                    lesson.completed && styles.lessonIconCompleted
-                  ]}>
-                    <Text style={styles.lessonEmoji}>
-                      {lesson.locked ? '🔒' : lesson.completed ? '✅' : lesson.emoji}
-                    </Text>
-                  </View>
-                  
-                  <View style={styles.lessonInfo}>
-                    <Text style={[
-                      styles.lessonTitle,
-                      lesson.locked && styles.lessonTitleLocked
-                    ]}>
-                      {lesson.title}
-                    </Text>
-                    <Text style={[
-                      styles.lessonDescription,
-                      lesson.locked && styles.lessonDescriptionLocked
-                    ]}>
-                      {lesson.description}
-                    </Text>
-                    <View style={styles.lessonMeta}>
-                      <View style={[
-                        styles.difficultyBadge,
-                        { backgroundColor: getDifficultyColor(lesson.difficulty) + '20' }
-                      ]}>
-                        <Text style={[
-                          styles.difficultyText,
-                          { color: getDifficultyColor(lesson.difficulty) }
-                        ]}>
-                          {lesson.difficulty}
-                        </Text>
-                      </View>
-                      <Text style={styles.pointsLabel}>+{lesson.points} pts</Text>
-                    </View>
-                  </View>
-                </View>
-                
-                {!lesson.locked && (
-                  <Text style={styles.lessonArrow}>→</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-          </View>
-
+            <Ionicons name="open-outline" size={18} color={COLORS.BITCOIN_ORANGE} />
+          </TouchableOpacity>
         </Animated.View>
       </ScrollView>
     </View>
@@ -234,207 +296,266 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.BACKGROUND,
   },
-  
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: SPACING.LG,
-    paddingTop: 60,
+    paddingTop: SPACING.XXL,
     paddingBottom: SPACING.LG,
+    backgroundColor: COLORS.BACKGROUND,
+  },
+  backButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.SUBTLE,
+  },
+  backButtonText: {
+    fontSize: 20,
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: '600',
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    letterSpacing: -0.5,
+  },
+  settingsButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.SURFACE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.SUBTLE,
+  },
+  settingsIcon: {
+    fontSize: 18,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  content: {
+    paddingHorizontal: SPACING.LG,
+    paddingBottom: SPACING.XXL,
   },
   
-  backButton: {
-    width: 40,
-    height: 40,
+  // Hero Section
+  heroSection: {
+    marginBottom: SPACING.XXL * 1.5,
+    paddingHorizontal: SPACING.SM,
+  },
+  heroTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: COLORS.TEXT_PRIMARY,
+    lineHeight: 42,
+    marginBottom: SPACING.MD,
+    letterSpacing: -1,
+  },
+  heroSubtitle: {
+    fontSize: 17,
+    lineHeight: 26,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: '400',
+  },
+  
+  // Categories
+  categoriesContainer: {
+    marginBottom: SPACING.XXL,
+    gap: SPACING.LG,
+  },
+  categoryCard: {
+    borderRadius: 24,
+    minHeight: 140,
+    position: 'relative',
+    ...SHADOWS.SUBTLE,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+    overflow: 'hidden',
+  },
+  cardTouchable: {
+    flex: 1,
+    padding: SPACING.LG,
+  },
+  cardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  cardLeft: {
+    marginRight: SPACING.LG,
+  },
+  imageContainer: {
+    width: 80,
+    height: 80,
     borderRadius: 20,
     backgroundColor: COLORS.SURFACE,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  
-  backButtonText: {
-    fontSize: 18,
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  placeholder: {
-    width: 40,
-  },
-  
-  content: {
-    paddingHorizontal: SPACING.LG,
-    paddingBottom: SPACING.XL,
-  },
-  
-  progressCard: {
-    backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.LG,
-    padding: SPACING.LG,
-    marginBottom: SPACING.XL,
     ...SHADOWS.SUBTLE,
   },
-  
-  progressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.MD,
+  availableImageContainer: {
+    backgroundColor: COLORS.BITCOIN_ORANGE + '15',
+    borderWidth: 2,
+    borderColor: COLORS.BITCOIN_ORANGE + '30',
   },
-  
-  progressTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  pointsBadge: {
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: RADIUS.SM,
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: SPACING.XS,
-  },
-  
-  pointsText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  progressBar: {
-    height: 8,
-    backgroundColor: COLORS.BACKGROUND,
-    borderRadius: 4,
-    marginBottom: SPACING.SM,
-  },
-  
-  progressFill: {
-    height: '100%',
-    backgroundColor: COLORS.PRIMARY,
-    borderRadius: 4,
-  },
-  
-  progressSubtext: {
-    fontSize: 12,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  
-  lessonsContainer: {
-    gap: SPACING.SM,
-  },
-  
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-    marginBottom: SPACING.MD,
-  },
-  
-  lessonCard: {
+  comingSoonImageContainer: {
     backgroundColor: COLORS.SURFACE,
-    borderRadius: RADIUS.MD,
-    padding: SPACING.MD,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: COLORS.BORDER_LIGHT,
-    marginBottom: SPACING.SM,
-  },
-  
-  lessonCardLocked: {
     opacity: 0.6,
   },
-  
-  lessonCardCompleted: {
-    borderColor: COLORS.SUCCESS,
-    backgroundColor: COLORS.SUCCESS + '10',
+  categoryImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 16,
   },
-  
-  lessonLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  comingSoonImage: {
+    opacity: 0.5,
+  },
+  cardRight: {
     flex: 1,
   },
-  
-  lessonIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: COLORS.BACKGROUND,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.MD,
-  },
-  
-  lessonIconLocked: {
-    backgroundColor: COLORS.TEXT_TERTIARY + '20',
-  },
-  
-  lessonIconCompleted: {
-    backgroundColor: COLORS.SUCCESS + '20',
-  },
-  
-  lessonEmoji: {
-    fontSize: 20,
-  },
-  
-  lessonInfo: {
-    flex: 1,
-    gap: SPACING.XS,
-  },
-  
-  lessonTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.TEXT_PRIMARY,
-  },
-  
-  lessonTitleLocked: {
+  categoryTitle: {
+    fontSize: 11,
+    fontWeight: '700',
     color: COLORS.TEXT_SECONDARY,
-  },
-  
-  lessonDescription: {
-    fontSize: 14,
-    color: COLORS.TEXT_SECONDARY,
-  },
-  
-  lessonDescriptionLocked: {
-    color: COLORS.TEXT_TERTIARY,
-  },
-  
-  lessonMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.SM,
-  },
-  
-  difficultyBadge: {
-    paddingHorizontal: SPACING.SM,
-    paddingVertical: 2,
-    borderRadius: RADIUS.XS,
-  },
-  
-  difficultyText: {
-    fontSize: 10,
-    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  
-  pointsLabel: {
-    fontSize: 12,
-    color: COLORS.TEXT_TERTIARY,
+  categorySubtitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  categoryDescription: {
+    fontSize: 15,
+    color: COLORS.TEXT_SECONDARY,
     fontWeight: '500',
+    lineHeight: 20,
+  },
+  playButton: {
+    position: 'absolute',
+    right: SPACING.LG,
+    bottom: SPACING.LG,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.SUBTLE,
+    elevation: 6,
+  },
+  playButtonIcon: {
+    fontSize: 20,
+    color: COLORS.TEXT_PRIMARY,
+    marginLeft: 2,
+    fontWeight: 'bold',
+  },
+  availableCard: {
+    borderColor: COLORS.BITCOIN_ORANGE + '40',
+    borderWidth: 2,
+    backgroundColor: COLORS.SURFACE_ELEVATED,
+  },
+  comingSoonCard: {
+    opacity: 0.7,
+    backgroundColor: COLORS.SURFACE,
+  },
+  comingSoonText: {
+    color: COLORS.TEXT_TERTIARY,
+  },
+  comingSoonDescription: {
+    color: COLORS.TEXT_TERTIARY,
+    fontStyle: 'italic',
+    fontSize: 14,
+  },
+  comingSoonButton: {
+    backgroundColor: COLORS.SURFACE + '80',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+  },
+  comingSoonBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: COLORS.TEXT_TERTIARY + '15',
+    gap: 4,
+  },
+  comingSoonBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.TEXT_TERTIARY,
+    letterSpacing: 0.5,
   },
   
-  lessonArrow: {
-    fontSize: 16,
+  // Learn More Section
+  learnMoreSection: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: 20,
+    padding: SPACING.XL,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+    ...SHADOWS.SUBTLE,
+  },
+  learnMoreTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.SM,
+    letterSpacing: -0.3,
+  },
+  learnMoreDescription: {
+    fontSize: 15,
+    lineHeight: 22,
     color: COLORS.TEXT_SECONDARY,
+    marginBottom: SPACING.LG,
+    fontWeight: '400',
+  },
+  learnMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.BITCOIN_ORANGE + '15',
+    borderRadius: 12,
+    paddingVertical: SPACING.MD,
+    paddingHorizontal: SPACING.LG,
+    borderWidth: 1,
+    borderColor: COLORS.BITCOIN_ORANGE + '30',
+  },
+  learnMoreButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  learnMoreButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.BITCOIN_ORANGE,
+    marginRight: SPACING.SM,
+  },
+  learnMoreButtonBadge: {
+    backgroundColor: COLORS.BITCOIN_ORANGE,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  learnMoreButtonBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: COLORS.TEXT_INVERSE,
+    letterSpacing: 0.5,
+  },
+  learnMoreButtonIcon: {
+    fontSize: 16,
+    color: COLORS.BITCOIN_ORANGE,
+    fontWeight: '600',
   },
 }); 

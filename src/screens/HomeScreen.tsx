@@ -402,6 +402,12 @@ export default function HomeScreen({ navigation, route }: Props) {
     navigation.navigate('Receive', { address: selectedWallet.address });
   };
 
+  const navigateToLightning = () => {
+    if (!selectedWallet || isAnimating) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('Lightning', { walletId: selectedWallet.id, walletMnemonic: selectedWallet.mnemonic });
+  };
+
   const navigateToBackup = () => {
     if (!selectedWallet) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -658,7 +664,7 @@ export default function HomeScreen({ navigation, route }: Props) {
           )}
         </Animated.View>
 
-        {/* Action Buttons - Cash App Style */}
+        {/* Action Buttons - Clean Send/Request */}
         <Animated.View style={[styles.actionButtons, { transform: [{ translateY: slideAnim }] }]}>
           <TouchableOpacity 
             style={[styles.actionButton, isAnimating && styles.actionButtonDisabled]} 
@@ -677,6 +683,29 @@ export default function HomeScreen({ navigation, route }: Props) {
             <View style={styles.actionButtonContent}>
               <Text style={styles.actionButtonIcon}>↙</Text>
               <Text style={styles.actionButtonText}>Request</Text>
+            </View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* Lightning Feature Card - Subtle preview */}
+        <Animated.View style={[styles.featureCardSubtle, { transform: [{ translateY: slideAnim }] }]}>
+          <TouchableOpacity 
+            style={styles.featureCardButtonSubtle}
+            onPress={navigateToLightning}
+          >
+            <View style={styles.featureCardContentSubtle}>
+              <View style={styles.featureCardLeft}>
+                <View style={styles.featureCardIconContainerSubtle}>
+                  <Ionicons name="flash" size={18} color={COLORS.TEXT_SECONDARY} />
+                </View>
+                <View style={styles.featureCardTextContainer}>
+                  <Text style={styles.featureCardTitleSubtle}>Lightning Network</Text>
+                  <Text style={styles.featureCardSubtitleSubtle}>Instant payments (Preview)</Text>
+                </View>
+              </View>
+              <View style={styles.featureCardRight}>
+                <Text style={styles.featureCardArrow}>→</Text>
+              </View>
             </View>
           </TouchableOpacity>
         </Animated.View>
@@ -909,6 +938,107 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   actionButtonTextDisabled: {
+    color: COLORS.TEXT_TERTIARY,
+  },
+
+  // Lightning Feature Card
+  featureCard: {
+    marginHorizontal: SPACING.LG,
+    marginBottom: SPACING.XL,
+  },
+  featureCardButton: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+  },
+  featureCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  featureCardLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  featureCardIconContainer: {
+    width: 44,
+    height: 44,
+    backgroundColor: COLORS.BITCOIN_ORANGE + '20',
+    borderRadius: RADIUS.SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.MD,
+  },
+  featureCardTextContainer: {
+    flex: 1,
+  },
+  featureCardTitle: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.XS / 2,
+  },
+  featureCardSubtitle: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  featureCardRight: {
+    alignItems: 'flex-end',
+  },
+  featureCardBadge: {
+    backgroundColor: COLORS.BITCOIN_ORANGE,
+    paddingHorizontal: SPACING.SM,
+    paddingVertical: SPACING.XS / 2,
+    borderRadius: RADIUS.SM,
+  },
+  featureCardBadgeText: {
+    fontSize: TYPOGRAPHY.SMALL - 1,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_INVERSE,
+    letterSpacing: 0.5,
+  },
+
+  // Lightning Feature Card - Subtle Version
+  featureCardSubtle: {
+    marginHorizontal: SPACING.LG,
+    marginBottom: SPACING.MD, // Reduced margin
+  },
+  featureCardButtonSubtle: {
+    backgroundColor: 'transparent',
+    borderRadius: RADIUS.SM,
+    padding: SPACING.SM, // Reduced padding
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT + '60', // More transparent border
+  },
+  featureCardContentSubtle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  featureCardIconContainerSubtle: {
+    width: 32, // Smaller icon container
+    height: 32,
+    backgroundColor: COLORS.TEXT_TERTIARY + '20', // Muted background
+    borderRadius: RADIUS.SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.SM,
+  },
+  featureCardTitleSubtle: {
+    fontSize: TYPOGRAPHY.SMALL, // Smaller font
+    fontWeight: TYPOGRAPHY.MEDIUM,
+    color: COLORS.TEXT_SECONDARY, // Less prominent color
+    marginBottom: SPACING.XS / 4,
+  },
+  featureCardSubtitleSubtle: {
+    fontSize: TYPOGRAPHY.SMALL - 1, // Even smaller subtitle
+    color: COLORS.TEXT_TERTIARY, // Very subtle color
+  },
+  featureCardArrow: {
+    fontSize: 14,
     color: COLORS.TEXT_TERTIARY,
   },
 

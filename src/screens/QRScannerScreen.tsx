@@ -31,7 +31,7 @@ type Props = {
 const { width, height } = Dimensions.get('window');
 
 export default function QRScannerScreen({ navigation, route }: Props) {
-  const { onScan } = route.params;
+  const { onScan, walletId, walletMnemonic } = route.params || {};
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
 
@@ -55,8 +55,23 @@ export default function QRScannerScreen({ navigation, route }: Props) {
     const isValidLightningInvoice = data.toLowerCase().startsWith('lnbc');
     
     if (isValidBitcoinAddress || isValidLightningInvoice) {
-      onScan(data);
-      navigation.goBack();
+      // If called from Lightning screen and it's a Lightning invoice, navigate to Lightning with the invoice
+      if (walletId && walletMnemonic && isValidLightningInvoice) {
+        navigation.navigate('Lightning', { 
+          walletId, 
+          walletMnemonic,
+          scannedInvoice: data 
+        });
+      }
+      // If called with onScan callback, use the callback
+      else if (onScan) {
+        onScan(data);
+        navigation.goBack();
+      }
+      // Otherwise just go back
+      else {
+        navigation.goBack();
+      }
     } else {
       Alert.alert(
         'Invalid QR Code',

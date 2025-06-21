@@ -13,8 +13,10 @@ import TransactionScreen from './src/screens/TransactionScreen';
 import QRScannerScreen from './src/screens/QRScannerScreen';
 import EducationScreen from './src/screens/EducationScreen';
 import LessonScreen from './src/screens/LessonScreen';
+import CourseContentScreen from './src/screens/CourseContentScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CreateWalletScreen from './src/screens/CreateWalletScreen';
+import LightningScreen from './src/screens/LightningScreen';
 import TabNavigator from './src/navigation/TabNavigator';
 
 export type WalletData = {
@@ -39,9 +41,11 @@ export type RootStackParamList = {
   Backup: { mnemonic: string };
   Restore: undefined;
   Transactions: { walletId: string; walletMnemonic: string };
-  QRScanner: { onScan: (data: string) => void };
+  Lightning: { walletId: string; walletMnemonic: string; scannedInvoice?: string };
+  QRScanner: { walletId?: string; walletMnemonic?: string; onScan?: (data: string) => void };
   Education: undefined;
   Lesson: { lessonId: string };
+  CourseContent: { courseId: string; courseTitle: string };
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -69,9 +73,11 @@ export default function App() {
           <Stack.Screen name="Backup" component={BackupScreen} />
           <Stack.Screen name="Restore" component={RestoreScreen} />
           <Stack.Screen name="Transactions" component={TransactionScreen} />
+          <Stack.Screen name="Lightning" component={LightningScreen} />
           <Stack.Screen name="QRScanner" component={QRScannerScreen} />
           <Stack.Screen name="Education" component={EducationScreen} />
           <Stack.Screen name="Lesson" component={LessonScreen} />
+          <Stack.Screen name="CourseContent" component={CourseContentScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </>
