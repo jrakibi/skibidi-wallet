@@ -1,10 +1,12 @@
 // API Configuration
 const config = {
   development: {
-    API_BASE_URL: 'http://10.0.100.246:8080',
+    API_BASE_URL: 'https://skibidi-backend-production.up.railway.app',
+    BITCOIN_NETWORK: 'mainnet', // Changed from default testnet to mainnet
   },
   production: {
     API_BASE_URL: 'https://skibidi-backend-production.up.railway.app',
+    BITCOIN_NETWORK: 'mainnet', // Ensure production uses mainnet
   }
 };
 
@@ -12,6 +14,11 @@ const config = {
 export const API_BASE_URL = __DEV__ 
   ? config.development.API_BASE_URL 
   : config.production.API_BASE_URL;
+
+// Export Bitcoin network configuration
+export const BITCOIN_NETWORK = __DEV__
+  ? config.development.BITCOIN_NETWORK
+  : config.production.BITCOIN_NETWORK;
 
 // Helper function to build API endpoints
 export const getApiUrl = (endpoint: string): string => {

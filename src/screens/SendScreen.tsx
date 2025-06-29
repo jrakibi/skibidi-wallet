@@ -13,6 +13,8 @@ import {
   PanResponder,
   Keyboard,
   TouchableWithoutFeedback,
+  Clipboard,
+  Linking,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -25,7 +27,7 @@ import {
   RADIUS
 } from '../theme';
 import QRCode from 'react-native-qrcode-svg';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
 import ContactListModal from '../components/ContactListModal';
 import { Contact } from '../components/ContactCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -45,6 +47,7 @@ export default function SendScreen({ navigation, route }: Props) {
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
 
   const [animationPhase, setAnimationPhase] = useState<'idle' | 'animating' | 'success' | 'printing' | 'receipt'>('idle');
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -166,6 +169,9 @@ export default function SendScreen({ navigation, route }: Props) {
     if (isTestMode) {
       console.log('🧪 Test mode activated - simulating transaction...');
       
+      // Set a fake transaction ID for demo purposes
+      setTransactionId('4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b');
+      
       // Simulate API delay
       setTimeout(() => {
         // API call is complete - trigger shoot up animation
@@ -193,12 +199,18 @@ export default function SendScreen({ navigation, route }: Props) {
           mnemonic: walletMnemonic,
           to_address: address.trim(),
           amount_sats: Number(amount),
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
         }),
       });
 
       const result = await response.json();
 
       if (result.success) {
+        // Store the transaction ID for blockchain explorer link
+        if (result.data && result.data.txid) {
+          setTransactionId(result.data.txid);
+        }
+        
         // API call is complete - trigger shoot up animation
         apiCompleteRef.current = true;
         if (shootUpRef.current) {
@@ -284,6 +296,7 @@ export default function SendScreen({ navigation, route }: Props) {
     
     console.log('🚀 Starting send animation...');
     setAnimationPhase('animating');
+    setTransactionId(null); // Reset transaction ID for new transaction
     bounceAnim.stopAnimation();
     bounceAnim.setValue(0);
     apiCompleteRef.current = false;
@@ -424,6 +437,56 @@ export default function SendScreen({ navigation, route }: Props) {
     setShowContactModal(false);
   };
 
+  const openBlockchainExplorer = async () => {
+    if (!transactionId) {
+      Alert.alert('Error', 'Transaction ID not available');
+      return;
+    }
+
+    try {
+      // Dynamically choose explorer URL based on network configuration
+      const networkPath = BITCOIN_NETWORK === 'mainnet' ? '' : '/testnet';
+      const explorerUrl = `https://mempool.space${networkPath}/tx/${transactionId}`;
+      const networkDisplayName = BITCOIN_NETWORK === 'mainnet' ? 'Bitcoin' : 'Bitcoin Testnet';
+      
+      const supported = await Linking.canOpenURL(explorerUrl);
+      if (supported) {
+        await Linking.openURL(explorerUrl);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else {
+        Alert.alert(
+          'Cannot Open Link',
+          `Transaction ID: ${transactionId}\n\nYou can search for this transaction on mempool.space${networkPath}`,
+          [
+            {
+              text: 'Copy Transaction ID',
+              onPress: () => {
+                Clipboard.setString(transactionId);
+                Alert.alert('Copied!', 'Transaction ID copied to clipboard');
+              }
+            },
+            { text: 'OK', style: 'default' }
+          ]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error Opening Link',
+        `Transaction ID: ${transactionId}\n\nYou can search for this transaction on mempool.space${BITCOIN_NETWORK === 'mainnet' ? '' : '/testnet'}`,
+        [
+          {
+            text: 'Copy Transaction ID',
+            onPress: () => {
+              Clipboard.setString(transactionId);
+              Alert.alert('Copied!', 'Transaction ID copied to clipboard');
+            }
+          },
+          { text: 'OK', style: 'default' }
+        ]
+      );
+    }
+  };
+
   return (
     <TouchableWithoutFeedback onPress={dismissKeyboard}>
       <View style={styles.container}>
@@ -542,9 +605,38 @@ export default function SendScreen({ navigation, route }: Props) {
                     <View style={styles.inputActions}>
                       <TouchableOpacity 
                         style={styles.actionButton}
-                        onPress={() => {
-                          // Paste functionality would go here
-                          console.log('Paste tapped');
+                        onPress={async () => {
+                          try {
+                            const clipboardText = await Clipboard.getString();
+                            if (clipboardText.trim()) {
+                              // Validate if it's a Bitcoin address (mainnet or testnet)
+                              const isValidBitcoinAddress = clipboardText.match(/^(bc1|tb1|[13mn2])[a-zA-HJ-NP-Z0-9]{25,87}$/);
+                              
+                              if (isValidBitcoinAddress) {
+                                setAddress(clipboardText.trim());
+                                setSelectedContact(null); // Clear any selected contact
+                                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                              } else {
+                                Alert.alert(
+                                  'Invalid Address',
+                                  'The clipboard does not contain a valid Bitcoin address.',
+                                  [{ text: 'OK', style: 'default' }]
+                                );
+                              }
+                            } else {
+                              Alert.alert(
+                                'Clipboard Empty',
+                                'No text found in clipboard.',
+                                [{ text: 'OK', style: 'default' }]
+                              );
+                            }
+                          } catch (error) {
+                            Alert.alert(
+                              'Error',
+                              'Could not access clipboard.',
+                              [{ text: 'OK', style: 'default' }]
+                            );
+                          }
                         }}
                         disabled={animationPhase !== 'idle'}
                       >
@@ -784,6 +876,25 @@ export default function SendScreen({ navigation, route }: Props) {
                    <Text style={styles.receiptLabel}>STATUS:</Text>
                    <Text style={styles.statusValue}>CONFIRMED</Text>
                  </View>
+                 
+                 {/* Transaction ID and Explorer Link */}
+                 {transactionId && (
+                   <>
+                     <View style={styles.dashedDivider} />
+                     <View style={styles.explorerSection}>
+                       <Text style={styles.receiptLabel}>TRANSACTION ID:</Text>
+                       <Text style={styles.transactionIdText}>
+                         {transactionId.substring(0, 8)}...{transactionId.substring(transactionId.length - 8)}
+                       </Text>
+                       <TouchableOpacity 
+                         style={styles.explorerButton}
+                         onPress={openBlockchainExplorer}
+                       >
+                         <Text style={styles.explorerButtonText}>🔍 View on Explorer</Text>
+                       </TouchableOpacity>
+                     </View>
+                   </>
+                 )}
                </View>
                
                <View style={styles.solidDivider} />
@@ -1532,5 +1643,38 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.TEXT_SECONDARY,
     fontWeight: TYPOGRAPHY.BOLD,
+  },
+  
+  // Blockchain explorer styles
+  explorerSection: {
+    marginTop: SPACING.SM,
+    alignItems: 'center',
+  },
+  transactionIdText: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_SECONDARY,
+    fontFamily: 'monospace',
+    marginVertical: SPACING.XS,
+    textAlign: 'center',
+  },
+  explorerButton: {
+    backgroundColor: '#4A90E2',
+    paddingHorizontal: SPACING.MD,
+    paddingVertical: SPACING.SM,
+    borderRadius: RADIUS.SM,
+    marginTop: SPACING.SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  explorerButtonText: {
+    fontSize: TYPOGRAPHY.SMALL,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
 }); 

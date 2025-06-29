@@ -17,6 +17,7 @@ import CourseContentScreen from './src/screens/CourseContentScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import CreateWalletScreen from './src/screens/CreateWalletScreen';
 import LightningScreen from './src/screens/LightningScreen';
+import SeedGameScreen from './src/screens/SeedGameScreen';
 import TabNavigator from './src/navigation/TabNavigator';
 
 export type WalletData = {
@@ -36,6 +37,7 @@ export type RootStackParamList = {
   Home: { selectedWallet?: WalletData } | undefined;
   WalletManager: undefined;
   CreateWallet: undefined;
+  SeedGame: { seedWords: string[]; onComplete: (words: string[]) => void };
   Send: { walletId: string; walletMnemonic: string };
   Receive: { address: string };
   Backup: { mnemonic: string };
@@ -68,6 +70,7 @@ export default function App() {
           <Stack.Screen name="Home" component={HomeScreen} />
           <Stack.Screen name="WalletManager" component={WalletManagerScreen} />
           <Stack.Screen name="CreateWallet" component={CreateWalletScreen} />
+          <Stack.Screen name="SeedGame" component={SeedGameScreen} />
           <Stack.Screen name="Send" component={SendScreen} />
           <Stack.Screen name="Receive" component={ReceiveScreen} />
           <Stack.Screen name="Backup" component={BackupScreen} />

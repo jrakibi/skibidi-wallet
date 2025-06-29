@@ -11,6 +11,8 @@ import {
   Animated,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -26,7 +28,8 @@ import {
   TYPOGRAPHY,
   GRADIENTS
 } from '../theme';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
+import GameifiedSeedInput from '../components/GameifiedSeedInput';
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,6 +70,7 @@ export default function RestoreScreen({ navigation }: Props) {
   const [selectedIconIndex, setSelectedIconIndex] = useState(0);
   const [restoredWalletData, setRestoredWalletData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [isGameified, setIsGameified] = useState(false);
   
   // Animations
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -179,7 +183,10 @@ export default function RestoreScreen({ navigation }: Props) {
       const response = await fetch(getApiUrl('/restore-wallet'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mnemonic: mnemonic.trim() }),
+        body: JSON.stringify({ 
+          mnemonic: mnemonic.trim(),
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
 
       const result = await response.json();
@@ -246,37 +253,86 @@ export default function RestoreScreen({ navigation }: Props) {
             <View style={styles.headerSection}>
               <Image 
                 source={require('../../assets/icons/locker.png')} 
-                style={styles.headerIcon}
+                style={styles.headerIconCompact}
               />
-              <Text style={styles.stepTitle}>Restore Your Wallet</Text>
-              <Text style={styles.stepDescription}>
+              <Text style={styles.stepTitleCompact}>Restore Your Wallet</Text>
+              <Text style={styles.stepDescriptionCompact}>
                 Enter your 12-word recovery phrase to restore your Bitcoin wallet
               </Text>
-            </View>
-            
-            <View style={styles.inputSection}>
-              <Text style={styles.inputLabel}>Recovery Phrase</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter your 12 words separated by spaces"
-                placeholderTextColor={COLORS.TEXT_TERTIARY}
-                value={mnemonic}
-                onChangeText={setMnemonic}
-                multiline
-                autoCapitalize="none"
-                autoCorrect={false}
-                spellCheck={false}
-                textAlignVertical="top"
-              />
-              <View style={styles.wordCountContainer}>
-                <Text style={[
-                  styles.wordCount,
-                  wordCount === 12 ? styles.wordCountValid : styles.wordCountInvalid
-                ]}>
-                  {wordCount}/12 words
-                </Text>
+              
+              {/* Mode Toggle */}
+              <View style={styles.modeToggleContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeToggleButton,
+                    !isGameified && styles.modeToggleButtonActive
+                  ]}
+                  onPress={() => {
+                    setIsGameified(false);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Text style={[
+                    styles.modeToggleText,
+                    !isGameified && styles.modeToggleTextActive
+                  ]}>
+                    Classic Mode
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[
+                    styles.modeToggleButton,
+                    isGameified && styles.modeToggleButtonActive
+                  ]}
+                  onPress={() => {
+                    setIsGameified(true);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  }}
+                >
+                  <Text style={[
+                    styles.modeToggleText,
+                    isGameified && styles.modeToggleTextActive
+                  ]}>
+                    🎮 Build Skibidi
+                  </Text>
+                </TouchableOpacity>
               </View>
             </View>
+            
+            {isGameified ? (
+              <GameifiedSeedInput
+                mnemonic={mnemonic}
+                onMnemonicChange={setMnemonic}
+                wordCount={wordCount}
+              />
+            ) : (
+              <View style={styles.inputSectionCompact}>
+                <Text style={styles.inputLabelCompact}>Recovery Phrase</Text>
+                <TextInput
+                  style={styles.textInputClassic}
+                  placeholder="Enter your 12 words separated by spaces"
+                  placeholderTextColor={COLORS.TEXT_TERTIARY}
+                  value={mnemonic}
+                  onChangeText={setMnemonic}
+                  multiline
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  spellCheck={false}
+                  textAlignVertical="top"
+                  returnKeyType="done"
+                  blurOnSubmit={true}
+                />
+                <View style={styles.wordCountContainer}>
+                  <Text style={[
+                    styles.wordCount,
+                    wordCount === 12 ? styles.wordCountValid : styles.wordCountInvalid
+                  ]}>
+                    {wordCount}/12 words
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         );
 
@@ -400,44 +456,54 @@ export default function RestoreScreen({ navigation }: Props) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.BACKGROUND} />
       
-      <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity 
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          
-          <Text style={styles.headerTitle}>Restore Wallet</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        {/* Progress Bar */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressTrack}>
-            <Animated.View 
-              style={[
-                styles.progressFill,
-                {
-                  width: progressAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
-              ]}
-            />
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <Animated.View style={[styles.content, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.backButtonText}>←</Text>
+            </TouchableOpacity>
+            
+            <Text style={styles.headerTitle}>Restore Wallet</Text>
+            <View style={styles.placeholder} />
           </View>
-        </View>
 
-        {/* Step Content */}
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {renderStepContent()}
-        </ScrollView>
+          {/* Progress Bar */}
+          <View style={styles.progressContainer}>
+            <View style={styles.progressTrack}>
+              <Animated.View 
+                style={[
+                  styles.progressFill,
+                  {
+                    width: progressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+          </View>
 
-        {/* Action Button */}
-        <View style={styles.buttonContainer}>
+          {/* Step Content */}
+          <ScrollView 
+            style={styles.scrollView} 
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.scrollContent}
+          >
+            {renderStepContent()}
+          </ScrollView>
+
+          {/* Action Button */}
+          <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[
               styles.actionButton,
@@ -462,7 +528,8 @@ export default function RestoreScreen({ navigation }: Props) {
           </TouchableOpacity>
         </View>
       </Animated.View>
-    </View>
+    </KeyboardAvoidingView>
+  </View>
   );
 }
 
@@ -471,10 +538,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.BACKGROUND,
   },
+
+  keyboardAvoidingView: {
+    flex: 1,
+  },
   
   content: {
     flex: 1,
     paddingHorizontal: SPACING.LG,
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: SPACING.LG,
   },
   
   header: {
@@ -752,5 +828,86 @@ const styles = StyleSheet.create({
   
   actionButtonTextDisabled: {
     color: COLORS.TEXT_TERTIARY,
+  },
+
+  // Mode Toggle Styles
+  modeToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.XS,
+    marginTop: SPACING.LG,
+    ...SHADOWS.SUBTLE,
+  },
+
+  modeToggleButton: {
+    flex: 1,
+    paddingVertical: SPACING.SM,
+    paddingHorizontal: SPACING.MD,
+    borderRadius: RADIUS.SM,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  modeToggleButtonActive: {
+    backgroundColor: COLORS.PRIMARY,
+    ...SHADOWS.GLOW_GRAY,
+  },
+
+  modeToggleText: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontWeight: TYPOGRAPHY.MEDIUM,
+    color: COLORS.TEXT_SECONDARY,
+  },
+
+  modeToggleTextActive: {
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+  },
+
+  // Compact styles for better fit
+  headerIconCompact: {
+    width: 40,
+    height: 40,
+    marginBottom: SPACING.SM,
+  },
+
+  stepTitleCompact: {
+    fontSize: TYPOGRAPHY.HEADING,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+    marginBottom: SPACING.SM,
+  },
+
+  stepDescriptionCompact: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+
+  inputSectionCompact: {
+    marginBottom: SPACING.MD,
+  },
+
+  inputLabelCompact: {
+    fontSize: TYPOGRAPHY.BODY,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.SM,
+    textAlign: 'center',
+  },
+
+  textInputClassic: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    padding: SPACING.MD,
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    minHeight: 80,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER_LIGHT,
+    ...SHADOWS.SUBTLE,
   },
 }); 

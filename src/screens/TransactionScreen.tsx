@@ -26,7 +26,7 @@ import {
   ANIMATIONS,
   CARD_STYLES 
 } from '../theme';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
 
 type TransactionScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Transactions'>;
 type TransactionScreenRouteProp = RouteProp<RootStackParamList, 'Transactions'>;
@@ -125,10 +125,18 @@ export default function TransactionScreen({ navigation, route }: Props) {
       }
       await AsyncStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(updatedNotes));
       
-      // Update local transactions with note
-      setTransactions(prev => prev.map(tx => 
-        tx.txid === txid ? { ...tx, note: note.trim() } : tx
-      ));
+      // Update local transactions with note and maintain sorting
+      setTransactions(prev => {
+        const updated = prev.map(tx => 
+          tx.txid === txid ? { ...tx, note: note.trim() } : tx
+        );
+        // Re-sort to maintain date order after update
+        return updated.sort((a, b) => {
+          const timestampA = a.timestamp || 0;
+          const timestampB = b.timestamp || 0;
+          return timestampB - timestampA; // Descending order (newest first)
+        });
+      });
     } catch (error) {
       Alert.alert('Error', 'Could not save note');
     }
@@ -139,7 +147,10 @@ export default function TransactionScreen({ navigation, route }: Props) {
       const response = await fetch(getApiUrl('/get-transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mnemonic: walletMnemonic }),
+        body: JSON.stringify({ 
+          mnemonic: walletMnemonic,
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
 
       const result = await response.json();
@@ -158,7 +169,15 @@ export default function TransactionScreen({ navigation, route }: Props) {
           note: notesMap[tx.txid] || ''
         }));
 
-        setTransactions(transactionsWithNotes);
+        // Sort transactions by date (most recent first)
+        const sortedTransactions = transactionsWithNotes.sort((a: Transaction, b: Transaction) => {
+          // Handle cases where timestamp might be undefined
+          const timestampA = a.timestamp || 0;
+          const timestampB = b.timestamp || 0;
+          return timestampB - timestampA; // Descending order (newest first)
+        });
+
+        setTransactions(sortedTransactions);
       } else {
         Alert.alert('Failed to Load', 'Unable to fetch transaction history');
       }

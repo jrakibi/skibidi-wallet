@@ -26,7 +26,7 @@ import {
   TYPOGRAPHY,
   GRADIENTS
 } from '../theme';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -183,7 +183,10 @@ export default function RestoreScreen({ navigation }: Props) {
       const response = await fetch(getApiUrl('/restore-wallet'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mnemonic }),
+        body: JSON.stringify({ 
+          mnemonic,
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
 
       const result = await response.json();

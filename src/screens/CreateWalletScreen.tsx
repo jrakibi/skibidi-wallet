@@ -10,7 +10,6 @@ import {
   Animated,
   Dimensions,
   ScrollView,
-  Modal,
   Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -29,7 +28,7 @@ import {
   CARD_STYLES,
   GRADIENTS
 } from '../theme';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -42,7 +41,7 @@ type Props = {
   navigation: CreateWalletScreenNavigationProp;
 };
 
-type Step = 'name' | 'generating' | 'backup' | 'complete';
+type Step = 'name' | 'generating' | 'backup' | 'seedReview' | 'complete';
 
 const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
@@ -73,7 +72,6 @@ export default function CreateWalletScreen({ navigation }: Props) {
   const [generatedWallet, setGeneratedWallet] = useState<any>(null);
   const [seedWords, setSeedWords] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showSeedModal, setShowSeedModal] = useState(false);
   
   // Animations
   const [fadeAnim] = useState(new Animated.Value(0));
@@ -134,9 +132,10 @@ export default function CreateWalletScreen({ navigation }: Props) {
 
     // Update progress animation based on step
     const stepProgress = {
-      name: 0.25,
-      generating: 0.5,
-      backup: 0.75,
+      name: 0.2,
+      generating: 0.4,
+      backup: 0.6,
+      seedReview: 0.8,
       complete: 1.0,
     };
 
@@ -161,6 +160,9 @@ export default function CreateWalletScreen({ navigation }: Props) {
         setCurrentStep('backup');
         break;
       case 'backup':
+        // This step now just shows the two options, they handle navigation themselves
+        break;
+      case 'seedReview':
         setCurrentStep('complete');
         break;
       case 'complete':
@@ -176,6 +178,10 @@ export default function CreateWalletScreen({ navigation }: Props) {
     try {
       const response = await fetch(getApiUrl('/create-wallet'), {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
       const data = await response.json();
 
@@ -347,33 +353,99 @@ Would you like to delete existing wallets or try creating with a different appro
         return (
           <View style={styles.stepContainer}>
             <View style={styles.warningContainer}>
-              <Image 
-                source={require('../../assets/icons/locker.png')} 
-                style={styles.warningIcon}
-              />
-              <Text style={styles.stepTitle}>Backup Your Seed</Text>
+              <Text style={styles.stepTitle}>🎯 Learn Your Seed Phrase</Text>
+              <Text style={styles.stepDescription}>
+                Your seed phrase is 12 special words that restore your wallet. Choose how you'd like to learn them:
+              </Text>
             </View>
 
-            <TouchableOpacity 
-              style={styles.seedContainer}
-              onPress={() => setShowSeedModal(true)}
-            >
-              <View style={styles.seedGrid}>
-                {seedWords.map((word, index) => (
-                  <View key={index} style={styles.seedWordContainer}>
-                    <Text style={styles.seedWordNumber}>{index + 1}</Text>
-                    <Text style={styles.seedWord}>{word}</Text>
+            {/* Options Row */}
+            <View style={styles.optionsRow}>
+              {/* Game Option */}
+              <TouchableOpacity 
+                style={styles.optionCard}
+                onPress={() => {
+                  navigation.navigate('SeedGame', {
+                    seedWords,
+                    onComplete: (words: string[]) => {
+                      // Game completed, proceed to seed review step
+                      setCurrentStep('seedReview');
+                    }
+                  });
+                }}
+              >
+                <LinearGradient
+                  colors={['#FF6B6B', '#4ECDC4']}
+                  style={styles.optionGradient}
+                >
+                  <View style={styles.optionIconContainer}>
+                    <Image 
+                      source={require('../../assets/brainrot/brainrot4.png')} 
+                      style={[styles.optionIcon, { transform: [{ scaleX: -1 }] }]}
+                    />
+                    <Text style={styles.optionBadge}>FUN</Text>
                   </View>
-                ))}
-              </View>
-              <Text style={styles.tapToView}>Tap to view seed phrase clearly</Text>
-            </TouchableOpacity>
+                  <Text style={styles.optionTitle}>Game Mode</Text>
+                  <Text style={styles.optionDesc}>
+                    Interactive
+                  </Text>
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Traditional Option */}
+              <TouchableOpacity 
+                style={styles.optionCard}
+                onPress={() => setCurrentStep('seedReview')}
+              >
+                <View style={styles.optionBackground}>
+                  <View style={styles.optionIconContainer}>
+                    <Image 
+                      source={require('../../assets/icons/locker.png')} 
+                      style={styles.optionIcon}
+                    />
+                    <Text style={styles.optionBadgeClassic}>CLASSIC</Text>
+                  </View>
+                  <Text style={styles.optionTitle}>Classic View</Text>
+                  <Text style={styles.optionDesc}>
+                    Simple list
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.helpText}>
+              <Text style={styles.helpTextContent}>
+                💡 Both options show the same secure seed phrase - just choose your preferred learning style!
+              </Text>
+            </View>
+          </View>
+        );
+
+      case 'seedReview':
+        return (
+          <View style={styles.stepContainer}>
+            <View style={styles.warningContainer}>
+              <Text style={styles.stepTitle}>🔐 Your Seed Phrase</Text>
+              <Text style={styles.stepDescription}>
+                Write down these 12 words in order. This is the only way to recover your wallet if you lose access.
+              </Text>
+            </View>
+
+            <View style={styles.seedGrid}>
+              {seedWords.map((word, index) => (
+                <View key={index} style={styles.seedWordContainer}>
+                  <Text style={styles.seedWordNumber}>{index + 1}</Text>
+                  <Text style={styles.seedWord}>{word}</Text>
+                </View>
+              ))}
+            </View>
 
             <View style={styles.backupTips}>
-              <Text style={styles.backupTipsTitle}>💡 Backup Tips:</Text>
-              <Text style={styles.backupTip}>• Write on paper, never store digitally</Text>
-              <Text style={styles.backupTip}>• Keep multiple copies in safe places</Text>
+              <Text style={styles.backupTipsTitle}>⚠️ Important:</Text>
+              <Text style={styles.backupTip}>• Write these words on paper</Text>
+              <Text style={styles.backupTip}>• Store in a safe place</Text>
               <Text style={styles.backupTip}>• Never share with anyone</Text>
+              <Text style={styles.backupTip}>• Anyone with these words can access your funds</Text>
             </View>
           </View>
         );
@@ -404,7 +476,8 @@ Would you like to delete existing wallets or try creating with a different appro
     switch (currentStep) {
       case 'name': return 'Create Wallet';
       case 'generating': return 'Generating...';
-      case 'backup': return 'I\'ve Saved It Safely';
+      case 'backup': return 'Choose Learning Style';
+      case 'seedReview': return 'I\'ve Saved My Seed Phrase';
       case 'complete': return 'Start Using Wallet';
       default: return 'Next';
     }
@@ -414,6 +487,7 @@ Would you like to delete existing wallets or try creating with a different appro
     switch (currentStep) {
       case 'name': return !walletName.trim();
       case 'generating': return loading;
+      case 'backup': return true; // Disabled because navigation is handled by option buttons
       default: return false;
     }
   };
@@ -485,40 +559,7 @@ Would you like to delete existing wallets or try creating with a different appro
         </View>
       </Animated.View>
 
-      {/* Seed Phrase Modal */}
-      <Modal
-        visible={showSeedModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowSeedModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Your Seed Phrase</Text>
-              <TouchableOpacity 
-                style={styles.modalCloseButton}
-                onPress={() => setShowSeedModal(false)}
-              >
-                <Text style={styles.modalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.modalSeedGrid}>
-              {seedWords.map((word, index) => (
-                <View key={index} style={styles.modalSeedWord}>
-                  <Text style={styles.modalSeedNumber}>{index + 1}</Text>
-                  <Text style={styles.modalSeedText}>{word}</Text>
-                </View>
-              ))}
-            </View>
-            
-            <Text style={styles.modalWarning}>
-              ⚠️ Never share this phrase with anyone. Store it safely offline.
-            </Text>
-          </View>
-        </View>
-      </Modal>
+
     </View>
   );
 }
@@ -937,5 +978,202 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.BACKGROUND,
     padding: SPACING.LG,
     borderRadius: RADIUS.MD,
+  },
+  
+  // Game option styles
+  gameOptionContainer: {
+    marginBottom: SPACING.LG,
+    borderRadius: RADIUS.LG,
+    overflow: 'hidden',
+    ...SHADOWS.SUBTLE,
+  },
+  
+  gameOptionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.LG,
+  },
+  
+  gameOptionIcon: {
+    width: 60,
+    height: 60,
+    marginRight: SPACING.MD,
+  },
+  
+  gameOptionContent: {
+    flex: 1,
+  },
+  
+  gameOptionTitle: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.XS,
+  },
+  
+  gameOptionDesc: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    opacity: 0.9,
+  },
+  
+  gameOptionArrow: {
+    fontSize: 24,
+    color: COLORS.TEXT_PRIMARY,
+    fontWeight: TYPOGRAPHY.BOLD,
+  },
+  
+  // Traditional option styles
+  traditionalOptionContainer: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.LG,
+    marginBottom: SPACING.LG,
+    ...SHADOWS.SUBTLE,
+  },
+  
+  traditionalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.LG,
+  },
+  
+  traditionalIcon: {
+    width: 40,
+    height: 40,
+    marginRight: SPACING.MD,
+  },
+  
+  traditionalContent: {
+    flex: 1,
+  },
+  
+  traditionalTitle: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.SEMIBOLD,
+    color: COLORS.TEXT_PRIMARY,
+    marginBottom: SPACING.XS,
+  },
+  
+  traditionalDesc: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_SECONDARY,
+  },
+  
+  // New improved styles
+  optionIconContainer: {
+    alignItems: 'center',
+    marginRight: SPACING.MD,
+    position: 'relative',
+  },
+  
+  optionBadge: {
+    fontSize: TYPOGRAPHY.SMALL,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: SPACING.XS,
+    paddingVertical: 2,
+    borderRadius: RADIUS.XS,
+    marginTop: SPACING.XS,
+    textAlign: 'center',
+  },
+  
+  optionBadgeClassic: {
+    fontSize: TYPOGRAPHY.SMALL,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_SECONDARY,
+    backgroundColor: COLORS.SURFACE_ELEVATED,
+    paddingHorizontal: SPACING.XS,
+    paddingVertical: 2,
+    borderRadius: RADIUS.XS,
+    marginTop: SPACING.XS,
+    textAlign: 'center',
+  },
+  
+  gameOptionFeature: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_PRIMARY,
+    opacity: 0.8,
+    marginTop: SPACING.XS,
+  },
+  
+  traditionalFeature: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_TERTIARY,
+    marginTop: SPACING.XS,
+  },
+  
+  traditionalArrow: {
+    fontSize: 20,
+    color: COLORS.TEXT_SECONDARY,
+    fontWeight: TYPOGRAPHY.MEDIUM,
+  },
+  
+  helpText: {
+    backgroundColor: COLORS.SURFACE,
+    borderRadius: RADIUS.MD,
+    padding: SPACING.MD,
+    marginVertical: SPACING.SM,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.PRIMARY,
+  },
+  
+  helpTextContent: {
+    fontSize: TYPOGRAPHY.SMALL,
+    color: COLORS.TEXT_SECONDARY,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  
+  // New compact option styles
+  optionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: SPACING.MD,
+    marginBottom: SPACING.LG,
+  },
+  
+  optionCard: {
+    flex: 1,
+    borderRadius: RADIUS.LG,
+    overflow: 'hidden',
+    ...SHADOWS.SUBTLE,
+  },
+  
+  optionGradient: {
+    padding: SPACING.XL,
+    alignItems: 'center',
+    minHeight: 160,
+    justifyContent: 'center',
+  },
+  
+  optionBackground: {
+    backgroundColor: COLORS.SURFACE,
+    padding: SPACING.XL,
+    alignItems: 'center',
+    minHeight: 160,
+    justifyContent: 'center',
+  },
+  
+  optionIcon: {
+    width: 50,
+    height: 50,
+    marginBottom: SPACING.SM,
+  },
+  
+  optionTitle: {
+    fontSize: TYPOGRAPHY.BODY_LARGE,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_PRIMARY,
+    textAlign: 'center',
+    marginBottom: SPACING.SM,
+  },
+  
+  optionDesc: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_PRIMARY,
+    opacity: 0.7,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 }); 

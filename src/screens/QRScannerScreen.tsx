@@ -51,7 +51,8 @@ export default function QRScannerScreen({ navigation, route }: Props) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
     // Validate the scanned data
-    const isValidBitcoinAddress = data.match(/^(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,87}$/);
+    // Updated regex to include both mainnet and testnet Bitcoin addresses
+    const isValidBitcoinAddress = data.match(/^(bc1|tb1|[13mn2])[a-zA-HJ-NP-Z0-9]{25,87}$/);
     const isValidLightningInvoice = data.toLowerCase().startsWith('lnbc');
     
     if (isValidBitcoinAddress || isValidLightningInvoice) {

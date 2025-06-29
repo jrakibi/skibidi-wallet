@@ -37,7 +37,7 @@ import {
   TYPOGRAPHY
 } from '../theme';
 import { useFocusEffect } from '@react-navigation/native';
-import { getApiUrl } from '../config';
+import { getApiUrl, BITCOIN_NETWORK } from '../config';
 
 const { width, height } = Dimensions.get('window');
 
@@ -67,6 +67,15 @@ interface BTCPrice {
   usd: number;
   lastUpdated: number;
 }
+
+// Add display mode interface
+interface BalanceDisplayMode {
+  mode: 'sats' | 'btc' | 'usd' | 'hidden';
+  label: string;
+  symbol: string;
+}
+
+
 
 const WALLETS_STORAGE_KEY = '@skibidi_wallets';
 
@@ -113,6 +122,8 @@ export default function HomeScreen({ navigation, route }: Props) {
   const [isLoadingWalletData, setIsLoadingWalletData] = useState(false);
   // Add BTC price state
   const [btcPrice, setBtcPrice] = useState<BTCPrice>({ usd: 0, lastUpdated: 0 });
+  // Add balance display mode state
+  const [balanceDisplayMode, setBalanceDisplayMode] = useState<'sats' | 'btc' | 'usd' | 'hidden'>('sats');
   
   // Add ref to track if fetch is in progress to prevent multiple simultaneous calls
   const fetchInProgressRef = useRef(false);
@@ -260,7 +271,10 @@ export default function HomeScreen({ navigation, route }: Props) {
       const balanceRes = await fetch(getApiUrl('/get-balance'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mnemonic: selectedWallet.mnemonic }),
+        body: JSON.stringify({ 
+          mnemonic: selectedWallet.mnemonic,
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
       const balanceData = await balanceRes.json();
       
@@ -280,14 +294,24 @@ export default function HomeScreen({ navigation, route }: Props) {
       const txRes = await fetch(getApiUrl('/get-transactions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mnemonic: selectedWallet.mnemonic }),
+        body: JSON.stringify({ 
+          mnemonic: selectedWallet.mnemonic,
+          network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+        }),
       });
       const txData = await txRes.json();
       
       console.log('Transactions response:', txData);
       
       if (txData.success) {
-        setTransactions(txData.data || []);
+        // Sort transactions by date (most recent first)
+        const sortedTransactions = (txData.data || []).sort((a: Transaction, b: Transaction) => {
+          // Handle cases where timestamp might be undefined
+          const timestampA = a.timestamp || 0;
+          const timestampB = b.timestamp || 0;
+          return timestampB - timestampA; // Descending order (newest first)
+        });
+        setTransactions(sortedTransactions);
       } else {
         console.error('Transactions fetch failed:', txData.error || txData.message);
         // Don't show error for invalid mnemonic - it might be a corrupted wallet
@@ -464,25 +488,104 @@ export default function HomeScreen({ navigation, route }: Props) {
     );
   };
 
-  const formatSats = (sats: number) => {
-    return (sats / 100000000).toFixed(8);
+  // BIP 177 inspired formatting - display sats as whole numbers (bitcoins)
+  const formatSats = (sats: number): string => {
+    if (sats === 0) return '0';
+    
+    // Always show the full amount with proper comma separation
+    return sats.toLocaleString();
   };
 
-  // Update formatUSD function to use real BTC price
-  const formatUSD = (sats: number) => {
-    if (btcPrice.usd === 0) return '$0.00';
+  // Traditional BTC formatting (with decimals)
+  const formatBTC = (sats: number): string => {
+    const btcAmount = sats / 100000000;
+    if (btcAmount === 0) return '0.00000000';
+    
+    // Remove trailing zeros but keep at least 2 decimal places for small amounts
+    if (btcAmount >= 1) {
+      return btcAmount.toFixed(8).replace(/\.?0+$/, '');
+    } else if (btcAmount >= 0.01) {
+      return btcAmount.toFixed(8).replace(/\.?0+$/, '');
+    } else {
+      return btcAmount.toFixed(8);
+    }
+  };
+
+  // Enhanced USD formatting with better precision for small amounts (without $ symbol)
+  const formatUSD = (sats: number): string => {
+    if (btcPrice.usd === 0) return '0.00';
     const btcAmount = sats / 100000000;
     const usdAmount = btcAmount * btcPrice.usd;
     
-    if (usdAmount < 0.01) {
-      return '$0.00';
+    if (usdAmount < 0.001) {
+      return '0.00';
+    } else if (usdAmount < 0.01) {
+      return `${usdAmount.toFixed(3)}`;
     } else if (usdAmount < 1) {
-      return `$${usdAmount.toFixed(3)}`;
+      return `${usdAmount.toFixed(3)}`;
     } else if (usdAmount < 100) {
-      return `$${usdAmount.toFixed(2)}`;
+      return `${usdAmount.toFixed(2)}`;
+    } else if (usdAmount < 1000) {
+      return `${Math.round(usdAmount)}`;
     } else {
-      return `$${Math.round(usdAmount).toLocaleString()}`;
+      return `${Math.round(usdAmount).toLocaleString()}`;
     }
+  };
+
+  // Format USD with symbol for secondary display
+  const formatUSDWithSymbol = (sats: number): string => {
+    if (btcPrice.usd === 0) return '$0.00';
+    return `$${formatUSD(sats)}`;
+  };
+
+  // Get display info based on current mode
+  const getBalanceDisplay = (sats: number) => {
+    switch (balanceDisplayMode) {
+      case 'sats':
+        return {
+          primary: formatSats(sats),
+          secondary: formatUSDWithSymbol(sats),
+          symbol: '₿',
+          label: sats === 1 ? 'bitcoin' : 'bitcoins' // BIP 177 terminology
+        };
+      case 'btc':
+        return {
+          primary: formatBTC(sats),
+          secondary: formatUSDWithSymbol(sats),
+          symbol: 'BTC',
+          label: 'BTC'
+        };
+      case 'usd':
+        return {
+          primary: formatUSD(sats),
+          secondary: `${formatSats(sats)} ₿`,
+          symbol: '$',
+          label: 'USD'
+        };
+      case 'hidden':
+        return {
+          primary: '••••••',
+          secondary: '••••••',
+          symbol: '',
+          label: 'Hidden'
+        };
+      default:
+        return {
+          primary: formatSats(sats),
+          secondary: formatUSDWithSymbol(sats),
+          symbol: '₿',
+          label: 'bitcoins'
+        };
+    }
+  };
+
+  // Cycle through display modes
+  const cycleBalanceDisplay = () => {
+    const modes: ('sats' | 'btc' | 'usd' | 'hidden')[] = ['sats', 'usd', 'btc', 'hidden'];
+    const currentIndex = modes.indexOf(balanceDisplayMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setBalanceDisplayMode(modes[nextIndex]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   // Add debug function to check wallet status
@@ -497,7 +600,10 @@ export default function HomeScreen({ navigation, route }: Props) {
         const response = await fetch(getApiUrl('/get-balance'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mnemonic: wallet.mnemonic }),
+          body: JSON.stringify({ 
+            mnemonic: wallet.mnemonic,
+            network: BITCOIN_NETWORK, // Specify mainnet instead of testnet
+          }),
         });
         const data = await response.json();
         console.log(`Wallet ${wallet.name} (${wallet.id}):`, data.success ? 'VALID MNEMONIC' : data.error);
@@ -511,8 +617,8 @@ export default function HomeScreen({ navigation, route }: Props) {
   const startCardFloatingAnimation = () => {
     // Create smooth circular floating motion
     const createCircularFloatingSequence = () => {
-      const radius = 6; // Circle radius in pixels
-      const duration = 6000; // 6 seconds for full circle (faster)
+      const radius = 12; // Circle radius in pixels (increased for more movement)
+      const duration = 4000; // 4 seconds for full circle (faster)
       
       return Animated.loop(
         Animated.timing(new Animated.Value(0), {
@@ -530,7 +636,7 @@ export default function HomeScreen({ navigation, route }: Props) {
     Animated.loop(
       Animated.timing(circleProgress, {
         toValue: 1,
-        duration: 6000, // 6 seconds for full circle (faster)
+        duration: 4000, // 4 seconds for full circle (faster)
         useNativeDriver: true,
       })
     ).start();
@@ -538,10 +644,11 @@ export default function HomeScreen({ navigation, route }: Props) {
     // Listen to the progress and update X,Y positions
     circleProgress.addListener(({ value }) => {
       const angle = value * 2 * Math.PI; // Convert to radians
-      const radius = 6; // Circle radius
+      const radius = 12; // Circle radius (increased for more movement)
       
-      const x = Math.cos(angle) * radius;
-      const y = Math.sin(angle) * radius;
+      // Emphasize horizontal movement more than vertical
+      const x = Math.cos(angle) * radius * 1.5; // 1.5x horizontal range
+      const y = Math.sin(angle) * radius * 0.8; // 0.8x vertical range
       
       cardFloatX.setValue(x);
       cardFloatY.setValue(y);
@@ -643,7 +750,7 @@ export default function HomeScreen({ navigation, route }: Props) {
           />
         </Animated.View>
 
-        {/* Balance Section - Cash App Style */}
+        {/* Balance Section - Interactive Display */}
         <Animated.View style={[styles.balanceContainer, { transform: [{ translateY: slideAnim }] }]}>
           <Text style={styles.balanceLabel}>Balance</Text>
           
@@ -652,15 +759,30 @@ export default function HomeScreen({ navigation, route }: Props) {
               <Text style={styles.loadingText}>Loading...</Text>
             </View>
           ) : (
-            <>
-              <Text style={styles.mainBalance}>
-                {formatUSD(balance.total)}
+            <TouchableOpacity 
+              style={styles.balanceDisplay}
+              onPress={cycleBalanceDisplay}
+              activeOpacity={0.8}
+            >
+              <View style={styles.balanceRow}>
+                <Text style={styles.mainBalance}>
+                  {getBalanceDisplay(balance.total).primary}
+                </Text>
+                {getBalanceDisplay(balance.total).symbol && (
+                  <Text style={styles.balanceSymbol}>
+                    {getBalanceDisplay(balance.total).symbol}
+                  </Text>
+                )}
+              </View>
+              
+              <Text style={styles.secondaryBalance}>
+                {getBalanceDisplay(balance.total).secondary}
               </Text>
               
-              <Text style={styles.btcBalance}>
-                {formatSats(balance.total)} BTC
+              <Text style={styles.balanceHint}>
+                Tap to switch • {getBalanceDisplay(balance.total).label}
               </Text>
-            </>
+            </TouchableOpacity>
           )}
         </Animated.View>
 
@@ -815,7 +937,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: SPACING.XXL,
+    paddingBottom: SPACING.XXL * 4, // Lots of white space at bottom
   },
 
   // Header
@@ -875,7 +997,7 @@ const styles = StyleSheet.create({
   // Card Container
   cardContainer: {
     marginHorizontal: 0,
-    marginBottom: SPACING.LG,
+    marginBottom: SPACING.MD,
     alignItems: 'center',
   },
   cardImage: {
@@ -884,22 +1006,47 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
 
-  // Balance Section - Cash App Style
+  // Balance Section - Interactive Display
   balanceContainer: {
     paddingHorizontal: SPACING.LG,
-    marginBottom: SPACING.XL,
+    marginBottom: SPACING.LG,
   },
   balanceLabel: {
-    fontSize: TYPOGRAPHY.BODY,
+    fontSize: TYPOGRAPHY.SMALL,
     color: COLORS.TEXT_SECONDARY,
-    marginBottom: SPACING.SM,
+    marginBottom: SPACING.XS,
+  },
+  balanceDisplay: {
+    alignItems: 'flex-start',
+    paddingVertical: SPACING.SM,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: SPACING.XS / 2,
   },
   mainBalance: {
     fontSize: 48,
     fontWeight: TYPOGRAPHY.BLACK,
     color: COLORS.TEXT_PRIMARY,
     letterSpacing: -2,
-    marginBottom: SPACING.XS,
+  },
+  balanceSymbol: {
+    fontSize: 24,
+    fontWeight: TYPOGRAPHY.BOLD,
+    color: COLORS.TEXT_SECONDARY,
+    marginLeft: SPACING.SM,
+  },
+  secondaryBalance: {
+    fontSize: TYPOGRAPHY.BODY,
+    color: COLORS.TEXT_SECONDARY,
+    marginBottom: SPACING.XS / 2,
+  },
+  balanceHint: {
+    fontSize: TYPOGRAPHY.SMALL - 1,
+    color: COLORS.TEXT_TERTIARY,
+    textAlign: 'left',
+    opacity: 0.6,
   },
   btcBalance: {
     fontSize: TYPOGRAPHY.BODY,
@@ -910,7 +1057,7 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     marginHorizontal: SPACING.LG,
-    marginBottom: SPACING.XL,
+    marginBottom: SPACING.MD,
     gap: SPACING.MD,
   },
   actionButton: {
@@ -1004,7 +1151,7 @@ const styles = StyleSheet.create({
   // Lightning Feature Card - Subtle Version
   featureCardSubtle: {
     marginHorizontal: SPACING.LG,
-    marginBottom: SPACING.MD, // Reduced margin
+    marginBottom: SPACING.MD,
   },
   featureCardButtonSubtle: {
     backgroundColor: 'transparent',
@@ -1045,7 +1192,8 @@ const styles = StyleSheet.create({
   // History Link
   historyLinkContainer: {
     marginHorizontal: SPACING.LG,
-    marginBottom: SPACING.XL,
+    marginTop: SPACING.MD,
+    marginBottom: SPACING.MD,
     alignItems: 'center',
   },
   historyLink: {
